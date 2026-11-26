@@ -658,28 +658,16 @@ void ui_journal(const char *objective,const char items[3][96],const char *captio
 void ui_caption(const char *area,const char *caption) {
     heading(area);paragraph(12,90,1,caption,4,PAPER);flush();
 }
-void ui_comic(bool last,bool single,ComicView view,const char *caption,unsigned panel,unsigned panels) {
+void ui_comic(bool last,bool single,ComicView view) {
     static const char *const controls[]={
         [COMIC_PAGE]=MP_TEXT("A   Дальше     /     B   Закрыть","A   Next     /     B   Close"),
-        [COMIC_ORIGINAL]=MP_TEXT("X   Крупный текст   /   A   Дальше","X   Large Text   /   A   Next"),
-        [COMIC_READABLE]=MP_TEXT("X   Оригинал   /   A   Дальше","X   Original   /   A   Next"),
         [COMIC_ZOOM_AVAILABLE]=MP_TEXT("X   Увеличить   /   A   Дальше","X   Zoom   /   A   Next"),
         [COMIC_ZOOM]=MP_TEXT("X   Вся страница   /   Крестовина","X   Full Page   /   D-Pad")
     };
     heading(MP_TEXT("Графический роман","Graphic Novel"));
-    if(*caption)label(17,53,0,caption,PAPER,view==COMIC_READABLE && panels>1?210:308);
-    bool more=view==COMIC_READABLE && panel+1<panels;
-    if(view==COMIC_READABLE && panels>1){
-        char counter[40];
-        snprintf(counter,sizeof counter,MP_TEXT("Текст  %u / %u","Text  %u / %u"),panel+1,panels);
-        label(215,53,0,counter,MUTED,310);
-    }
-    tile(8,77,304,56,more?MP_TEXT("Дальше по тексту","Continue Reading"):last?MP_TEXT("Дальше","Next"):MP_TEXT("Следующая страница","Next Page"),true,true,-1);
+    tile(8,77,304,56,last?MP_TEXT("Дальше","Next"):MP_TEXT("Следующая страница","Next Page"),true,true,-1);
     tile(8,144,304,54,single?MP_TEXT("Закрыть","Close"):MP_TEXT("Пропустить вступление","Skip Intro"),true,false,-1);
-    const char *hint=controls[view];
-    if(view==COMIC_READABLE && panels>1)hint=MP_TEXT("X   Вся страница   /   Крестовина","X   Full Page   /   D-Pad");
-    if(view==COMIC_ZOOM && panels)hint=MP_TEXT("X   Крупный текст   /   Крестовина","X   Large Text   /   D-Pad");
-    footer(hint);flush();
+    footer(controls[view]);flush();
 }
 static int loading_percent=-1;
 void ui_loading_progress(unsigned percent){

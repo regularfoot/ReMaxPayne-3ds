@@ -16,6 +16,7 @@ from pack_campaign_text import encode as encode_texts
 from pack_campaign_movies import MOVIES
 from xbox_disc import language, movie_source
 
+EXCLUDED_CAMPAIGN_DIRS = {'sounds', 'pages-reading', 'pages-readable', 'pages-captions'}
 
 def root_path():return Path(__file__).resolve().parents[1]
 
@@ -146,7 +147,7 @@ def package(assets,campaign,elf,smdh,output,tool):
             if src.is_file():attach(src,romfs/src.relative_to(assets))
         for src in campaign.rglob('*'):
             rel=src.relative_to(campaign)
-            if not src.is_file() or src.suffix=='.partial' or rel.parts[0]=='sounds':continue
+            if not src.is_file() or src.suffix=='.partial' or rel.parts[0] in EXCLUDED_CAMPAIGN_DIRS:continue
             attach(src,romfs/'campaign'/rel)
         staged=output.with_suffix('.partial')
         subprocess.run([tool,elf,staged,'--smdh='+str(smdh),'--romfs='+str(romfs)],check=True)

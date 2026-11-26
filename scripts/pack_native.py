@@ -23,13 +23,6 @@ def member(archive, path):
         return ras.member_bytes(data, entry)
 
 
-def write_lcd(image, stream):
-    import numpy as np
-    r,g,b=np.asarray(image,dtype=np.uint16).transpose(2,0,1)
-    encoded=((r>>3)<<11)|((g>>2)<<5)|(b>>3)
-    stream.write(encoded[::-1].T.astype('<u2',copy=False).tobytes())
-
-
 def write_screen(data, dest, *, comic=False, preserve_aspect=False, size=(400, 240)):
     import numpy as np
     # gfxGetFramebuffer uses bottom-to-top columns on the rotated top LCD.
@@ -52,8 +45,9 @@ def write_screen(data, dest, *, comic=False, preserve_aspect=False, size=(400, 2
         visible=(np.asarray(image).max(axis=2)>10).sum(axis=1)>image.width//100
         rows=np.flatnonzero(visible)
         image=image.crop((0,int(rows[0]),image.width,int(rows[-1])+1)).resize(size,Image.Resampling.LANCZOS)
-    with dest.open('wb') as stream:
-        write_lcd(image,stream)
+    r,g,b=np.asarray(image,dtype=np.uint16).transpose(2,0,1)
+    encoded=((r>>3)<<11)|((g>>2)<<5)|(b>>3)
+    dest.write_bytes(encoded[::-1].T.astype('<u2',copy=False).tobytes())
 
 
 def marker(data, name):

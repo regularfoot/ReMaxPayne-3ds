@@ -7,7 +7,6 @@
 #include <string.h>
 
 enum { CHANNEL=3, BUFFERS=3, SAMPLES=2048, PAGE_WIDTH=400, PAGE_HEIGHT=240 };
-enum { PAGE_BYTES=PAGE_WIDTH*PAGE_HEIGHT*2, MAX_READING_PANELS=64 };
 typedef struct {
     FILE *file;
     int16_t *pcm;
@@ -51,17 +50,6 @@ static FILE *page_asset(const char *folder,const char *name) {
     return campaign_file(path);
 }
 
-static unsigned panel_count(FILE *file) {
-    if(!file || fseek(file,0,SEEK_END))return 0;
-    long size=ftell(file);
-    if(size<=0 || size%PAGE_BYTES || size/PAGE_BYTES>MAX_READING_PANELS)return 0;
-    return (unsigned)(size/PAGE_BYTES);
-}
-
-static bool show_panel(FILE *file,unsigned panel) {
-    return !fseek(file,(long)panel*PAGE_BYTES,SEEK_SET) && show_page(file);
-}
-
 static bool read_pages(unsigned first,unsigned last,const char *const *names,FILE *journal) {
     gfxSetScreenFormat(GFX_TOP,GSP_RGB565_OES);
     bool audio=R_SUCCEEDED(ndspInit());
@@ -74,7 +62,7 @@ static bool read_pages(unsigned first,unsigned last,const char *const *names,FIL
         float gain=.85f*ui_settings.volume/4.f,mix[12]={gain,gain};
         ndspChnSetMix(CHANNEL,mix);
     }
-    bool ok=true,closed=false,readable=true;
+    bool ok=true,closed=false;
     gfxSet3D(false);
     for (unsigned page=first;page<=last && !closed;page++) {
         char path[144];
@@ -87,35 +75,10 @@ static bool read_pages(unsigned first,unsigned last,const char *const *names,FIL
         ok=image && show_page(image);
         if (image) fclose(image);
         if (!ok) break;
-        FILE *reading=NULL,*zoom=NULL;
-        unsigned panels=0,panel=0;
-        if(names){
-            reading=page_asset("pages-readable",names[page]);
-            if(!reading) {
-                reading=page_asset("pages-reading",names[page]);
-                zoom=page_asset("pages-zoom",names[page]);
-            }
-            panels=panel_count(reading);
-        }
+        FILE *zoom=names?page_asset("pages-zoom",names[page]):NULL;
         uint16_t *pixels=NULL;
         int x=0,y=0;
-        char caption[128]={0};
-        if(names){
-            char caption_path[144];snprintf(caption_path,sizeof caption_path,"pages-captions/%s.txt",names[page]);
-            FILE *file=campaign_file(caption_path);
-            if(file){
-                if(!fgets(caption,sizeof caption,file))caption[0]=0;
-                fclose(file);
-            }
-        }
-        ComicView whole=zoom?COMIC_ZOOM_AVAILABLE:panels?COMIC_ORIGINAL:COMIC_PAGE;
-        ComicView view=panels && readable?COMIC_READABLE:whole;
-        if(view==COMIC_READABLE && !show_panel(reading,panel)){
-            panels=0;view=zoom?COMIC_ZOOM_AVAILABLE:COMIC_PAGE;
-            FILE *base=page_asset("pages",names[page]);
-            ok=base && show_page(base);
-            if(base)fclose(base);
-        }
+        ComicView view=zoom?COMIC_ZOOM_AVAILABLE:COMIC_PAGE;
         if (voice.pcm) {
             strcpy(strrchr(path,'.'),".pcm");
             voice.file=names?campaign_file(path):fopen(path,"rb");
@@ -123,7 +86,7 @@ static bool read_pages(unsigned first,unsigned last,const char *const *names,FIL
             for (unsigned i=0;i<BUFFERS;i++) voice.wave[i]=(ndspWaveBuf){0};
             fill_audio(&voice);
         }
-        ui_comic(page==last,first==last,view,caption,panel,panels);
+        ui_comic(page==last,first==last,view);
         gfxFlushBuffers();gfxScreenSwapBuffers(GFX_TOP,false);gspWaitForVBlank();
         if (journal) {fprintf(journal,"COMIC page=%u voice=%u\n",page,voice.file!=NULL);fflush(journal);}
         while (ok) {
@@ -135,45 +98,32 @@ static bool read_pages(unsigned first,unsigned last,const char *const *names,FIL
                 touchPosition tap;hidTouchRead(&tap);
                 if(tap.px>=8 && tap.px<312 && tap.py>=77 && tap.py<133) down|=KEY_A;
                 if(tap.px>=8 && tap.px<312 && tap.py>=144 && tap.py<198) down|=KEY_B;
-                if((panels || zoom) && tap.py>=215)down|=KEY_X;
+                if(zoom && tap.py>=215)down|=KEY_X;
             }
-            if((panels || zoom) && (down&KEY_X)){
-                if(view==COMIC_READABLE)view=whole;
-                else if(view==COMIC_ZOOM)view=panels?COMIC_READABLE:COMIC_ZOOM_AVAILABLE;
-                else view=zoom?COMIC_ZOOM:COMIC_READABLE;
-                if(view==COMIC_ZOOM && !pixels){
+            if(zoom && (down&KEY_X)){
+                if(!pixels){
                     const size_t count=4*PAGE_WIDTH*PAGE_HEIGHT;
                     pixels=malloc(count*sizeof(*pixels));
                     if(!pixels || fread(pixels,sizeof(*pixels),count,zoom)!=count){
                         free(pixels);pixels=NULL;
                         fclose(zoom);zoom=NULL;
-                        view=panels?COMIC_READABLE:COMIC_PAGE;
                     }
                 }
-                if(view==COMIC_ZOOM)show_zoom(pixels,x,y);
-                else if(view==COMIC_READABLE)ok=show_panel(reading,panel);
-                else {
+                if(view==COMIC_ZOOM){
                     FILE *base=page_asset("pages",names[page]);
                     ok=base && show_page(base);
                     if(base)fclose(base);
+                    view=COMIC_ZOOM_AVAILABLE;
+                }else if(pixels){
+                    show_zoom(pixels,x,y);
+                    view=COMIC_ZOOM;
+                }else{
+                    view=COMIC_PAGE;
                 }
-                if(panels)readable=view==COMIC_READABLE;
                 if(!ok)break;
-                ui_comic(page==last,first==last,view,caption,panel,panels);
-                gfxFlushBuffers();gfxScreenSwapBuffers(GFX_TOP,false);
+                ui_comic(page==last,first==last,view);
+                if(pixels){gfxFlushBuffers();gfxScreenSwapBuffers(GFX_TOP,false);}
                 down&=~KEY_A;
-            }else if(view==COMIC_READABLE && panels>1){
-                unsigned next=panel;
-                if((down&KEY_DLEFT) && panel)next=panel-1;
-                else if((down&(KEY_DRIGHT|KEY_A)) && panel+1<panels)next=panel+1;
-                if(next!=panel){
-                    ok=show_panel(reading,next);
-                    if(!ok)break;
-                    panel=next;
-                    down&=~KEY_A;
-                    ui_comic(page==last,first==last,view,caption,panel,panels);
-                    gfxFlushBuffers();gfxScreenSwapBuffers(GFX_TOP,false);
-                }
             }else if(view==COMIC_ZOOM){
                 u32 held=hidKeysHeld();
                 int nx=pan(x,6*(!!(held&KEY_DRIGHT)-!!(held&KEY_DLEFT)),PAGE_WIDTH);
@@ -186,7 +136,6 @@ static bool read_pages(unsigned first,unsigned last,const char *const *names,FIL
             if (down&(KEY_A|KEY_B)) {closed=(down&KEY_B)!=0;break;}
             gspWaitForVBlank();
         }
-        if (reading) fclose(reading);
         if (zoom) fclose(zoom);
         free(pixels);
         if (audio) ndspChnWaveBufClear(CHANNEL);

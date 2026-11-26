@@ -33,7 +33,7 @@ From the main menu, choose **New Game** to start the campaign or **Tutorial** to
 
 ### Graphic novel
 
-Graphic-novel narration and artwork come from your Xbox copy. Large-text mode makes dialogue easier to read on supported Russian pages. **A** advances the text or page, **D-Pad Left and Right** move through the enlarged text, and **X** cycles through the available views. The supported PAL disc defaults to a Russian interface. The supported English NTSC disc defaults to English.
+Graphic-novel pages, lettering, and narration come from your Xbox copy. Press **A** to advance a page. **X** zooms into the original page and returns to the full view. In the zoomed view, use the **D-Pad** to pan. The supported PAL disc defaults to a Russian interface. The supported English NTSC disc defaults to English.
 
 ## Build and install
 

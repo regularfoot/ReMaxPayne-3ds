@@ -8,7 +8,6 @@ import subprocess
 import struct
 from dade.maxpayne import ras
 from pack_native import write_screen
-from pack_readable_comics import pack as readable_comics, pack_captions, pack_reading_page, reading_layouts
 from xbox_disc import archive_root, language
 
 
@@ -56,8 +55,6 @@ def pack(disc,source,out):
     pages.mkdir(parents=True,exist_ok=True)
     zoom=out/'pages-zoom'
     zoom.mkdir(exist_ok=True)
-    reading=out/'pages-reading'
-    layouts={} if english else reading_layouts()
     waves={p.relative_to(archives/'data/database/sounds').as_posix().casefold():p
            for p in (archives/'data/database/sounds').rglob('*') if p.suffix.casefold()=='.wav'}
     def convert(key,dest):
@@ -74,8 +71,6 @@ def pack(disc,source,out):
             if path.stem!='black':
                 large=zoom/dest.name
                 tmp=large.with_suffix('.partial');write_screen(image,tmp,comic=True,size=(800,480));tmp.replace(large)
-            if not pack_reading_page(path.stem,image,reading,layouts):
-                (reading/dest.name).unlink(missing_ok=True)
             key=f'story/{path.parts[-3]}/{path.stem}.wav'
             narration=dest.with_suffix('.pcm')
             if key in waves:convert(key,narration)
@@ -93,13 +88,6 @@ def pack(disc,source,out):
     from pack_campaign_text import pack as pack_text
     pack_text(out)
     print(f'{len(list(pages.glob("*.565")))} pages, {len(list(pages.glob("*.pcm")))} narrations')
-    if english:
-        for folder,extension in (('pages-readable','565'),('pages-captions','txt')):
-            for path in (out/folder).glob('*.'+extension):
-                path.unlink()
-    else:
-        readable_comics(Path(__file__).resolve().parents[1]/'assets/comics/prologue',out)
-        pack_captions(out)
     (out/'language.txt').write_text(locale+'\n')
 
 
