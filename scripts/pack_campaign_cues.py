@@ -8,6 +8,7 @@ from dade.maxpayne import ras
 from skin_poses import definitions,SLOTS
 from pack_native import member
 import skin_motion
+from xbox_disc import archive_root
 
 def pack(disc,folder):
     idx=(folder/'poses.idx').read_bytes()
@@ -17,15 +18,15 @@ def pack(disc,folder):
     with (folder/'poses.pak').open('rb') as f:
         f.seek(16)
         skins=[f.read(96)[:64].split(b'\0')[0].decode() for _ in range(ns)]
-    ai=skin_motion.constants(member(disc/'english/x_headers.ras','data/database/ai_ranges.h').decode('latin1'))
-    shooting=skin_motion.constants(member(disc/'english/x_headers.ras','data/database/shooting.h').decode('latin1'))
-    common=skin_motion.constants(member(disc/'english/x_headers.ras','data/database/characters.h').decode('latin1'))
+    ai=skin_motion.constants(member(archive_root(disc)/'x_headers.ras','data/database/ai_ranges.h').decode('latin1'))
+    shooting=skin_motion.constants(member(archive_root(disc)/'x_headers.ras','data/database/shooting.h').decode('latin1'))
+    common=skin_motion.constants(member(archive_root(disc)/'x_headers.ras','data/database/characters.h').decode('latin1'))
     physical=[]
     weapons=[]
     characters=[]
     strings={'':0};rows=[];groups={};bindings=[]
     def sid(key):return strings.setdefault(key,len(strings))
-    with (disc/'english/x_data.ras').open('rb') as f,mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as data:
+    with (archive_root(disc)/'x_data.ras').open('rb') as f,mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as data:
         files={e.path.lower():e for e in ras.read_directory(data).entries}
         def read(path):return ras.member_bytes(data,files['data/database/'+path+'.txt']).decode('latin1')
         for weapon in ('empty','beretta','berettadual','deserteagle','pumpshotgun','sawedshotgun','jackhammer','ingram','ingramdual','mp5','sniper','baseballbat','leadpipe','grenade','molotov','m79'):

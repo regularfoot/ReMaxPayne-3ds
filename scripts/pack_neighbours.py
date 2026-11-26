@@ -10,6 +10,7 @@ from PIL import Image
 from dade.maxpayne.model import read_model
 from max_payne_sdk.max_kf2 import MaxKF2Reader
 from max_payne_sdk.max_type import parseType
+from native_texture import TEXEL_BYTES
 
 
 def portals(data):
@@ -51,8 +52,8 @@ def read_graphics(path):
     _,nt,nb,nv,nc=struct.unpack_from('<4s4I',data)
     at=424;textures=[]
     for _ in range(nt):
-        w,h,_,m,_,_=struct.unpack_from('<HHBBBB',data,at)
-        end=at+8+sum(w*h*2>>(2*n) for n in range(m+1))
+        w,h,fmt,m,_,_=struct.unpack_from('<HHBBBB',data,at)
+        end=at+8+sum((w>>n)*(h>>n)*TEXEL_BYTES[fmt] for n in range(m+1))
         textures.append(data[at:end]);at=end
     batches=list(struct.iter_unpack('<4I',data[at:at+16*nb]));at+=16*nb
     vertices=np.frombuffer(data,dtype='<f4',count=nv*7,offset=at).reshape(-1,7)

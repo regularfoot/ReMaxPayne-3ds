@@ -8,6 +8,7 @@ import struct
 from max_payne_sdk.max_type import parseType
 from campaign_source import levels, level_archive
 from pack_native import member
+from xbox_disc import archive_root
 
 
 def graph(data):
@@ -36,12 +37,12 @@ def graph(data):
 
 def pack(disc,out,only=None):
     available={}
-    catalog=[cfg for cfg in levels(disc/'english') if not only or cfg['id'] in only]
-    for archive in {level_archive(disc/'english',stage) for stage in catalog}:
+    catalog=[cfg for cfg in levels(archive_root(disc)) if not only or cfg['id'] in only]
+    for archive in {level_archive(archive_root(disc),stage) for stage in catalog}:
         with archive.open('rb') as f,mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as data:
             available[archive]={entry.path.lower() for entry in ras.read_directory(data).entries}
     for cfg in catalog:
-        arc=level_archive(disc/'english',cfg)
+        arc=level_archive(archive_root(disc),cfg)
         path='data/database/levels/'+cfg['directory']+'/'+str(Path(cfg['level']).with_suffix('.ai'))
         nodes=graph(member(arc,path)) if path.lower() in available[arc] else {}
         remap={k:i for i,k in enumerate(nodes)}

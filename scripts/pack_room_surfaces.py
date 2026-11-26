@@ -15,6 +15,7 @@ from campaign_source import levels, level_archive
 from pack_native import member
 from max_payne_sdk.max_ldb import MaxLDBReader
 from triangulate import triangulate
+from xbox_disc import archive_root
 
 SURFACES = ('default','carpet','cardboard','couch','gravel','metal','metal_hollow','metal_outside',
             'metal_solid','paper','pipes','pipes_steam','snow','water_bottom','wood','wireframe')
@@ -103,7 +104,7 @@ def bake(job):
 if __name__=='__main__':
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('disc',type=Path);ap.add_argument('out',type=Path);ap.add_argument('--jobs',type=int,default=3)
-    a=ap.parse_args();arcs=a.disc/'english'
+    a=ap.parse_args();arcs=archive_root(a.disc)
     jobs=[(arcs,s,a.out/(s['id']+'.surf')) for s in levels(arcs)]
     with ProcessPoolExecutor(a.jobs) as pool:
         for name in pool.map(bake,jobs):print(name,flush=True)

@@ -7,6 +7,7 @@ import struct
 from dade.maxpayne import ras
 from pack_decals import pack_decals
 from pack_campaign_events import FIRST_PICKUP, PICKUP, item_templates
+from xbox_disc import archive_root
 
 
 def pack_grant(messages):
@@ -39,15 +40,15 @@ def pack_grant(messages):
 
 def pack(disc,out):
     constants={}
-    with (disc/'english/x_headers.ras').open('rb') as f,mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as data:
+    with (archive_root(disc)/'x_headers.ras').open('rb') as f,mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as data:
         for entry in ras.read_directory(data).entries:
             if entry.path.lower().endswith('.h'):
                 body=ras.member_bytes(data,entry).decode('latin1')
                 for name,value in re.findall(r'^\s*#define\s+(\w+)\s+([-+.\d]+)\b',body,re.M):
                     constants[name.lower()]=value
     records=[];bursts=[];drops=[];effects=[];additional=[];pending=[];contacts={}
-    items=item_templates(disc/'english')
-    with (disc/'english/x_data.ras').open('rb') as f,mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as data:
+    items=item_templates(archive_root(disc))
+    with (archive_root(disc)/'x_data.ras').open('rb') as f,mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as data:
         files={e.path.lower():e for e in ras.read_directory(data).entries}
         death_drops={}
         for path,entry in files.items():

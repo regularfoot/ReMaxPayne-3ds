@@ -13,27 +13,38 @@ from tempfile import TemporaryDirectory
 from campaign_refs import validate
 from campaign_romfs import verify_image
 from pack_campaign_text import encode as encode_texts
+from pack_campaign_movies import MOVIES
+from xbox_disc import language, movie_source
 
 
 def root_path():return Path(__file__).resolve().parents[1]
 
 def package(assets,campaign,elf,smdh,output,tool):
+    disc=Path(os.environ.get("GAME_DISC","game"))
+    locale=language(disc)
+    for folder in (assets,campaign):
+        stamp=folder/'language.txt'
+        if stamp.is_file() and stamp.read_text().strip()!=locale:
+            raise ValueError(f'Rebuild {folder} with MP_LANG={locale}')
     maps={p.stem for p in campaign.glob('*.mpc')}
     if len(maps)!=69 or not {'tutorial','startup_level','part0_level1','p3_l7-3','end_combat'}<=maps:
         raise ValueError('Missing campaign, opening or bonus map')
     for extension in ('evt','nav','bounds','surf','lights','dlg'):
         if maps!={p.stem for p in campaign.glob('*.'+extension)}:
             raise ValueError('Incomplete '+extension+' tables')
-    for name in ('transitions.bin','difficulty.bin','combatants.bin','skin_rules.bin','bones.bind','bones.rest','poses.norm','bone_sets.bind','bones.tree','left_grip.bind','cues.bin','torso.bind','faces/max_payne.face','faces/young_max_payne.face','particles.pak','decals.pak','attract00.mpv','attract01.mpv','cameras.pak','poses.pak','poses.idx','poses.meta','animations.source.json','stages.idx','audio.bank','projectiles.bin','moves.anim','intro.mpv','credits.mpv','cast/rat.mesh','cast/rat.anim','items/medipack_small.mesh','items/berettadual.mesh',
+    for name in ('transitions.bin','difficulty.bin','combatants.bin','skin_rules.bin','bones.bind','bones.rest','poses.norm','bone_sets.bind','bones.tree','left_grip.bind','cues.bin','torso.bind','faces/max_payne.face','faces/young_max_payne.face','particles.pak','decals.pak','cameras.pak','poses.pak','poses.idx','poses.meta','animations.source.json','stages.idx','audio.bank','projectiles.bin','moves.anim','cast/rat.mesh','cast/rat.anim','items/medipack_small.mesh','items/berettadual.mesh',
                  'weapons/m79.mesh','pages/p1l0a_001.565'):
         if not (campaign/name).is_file():raise ValueError('Missing '+name)
+    for name in MOVIES:
+        if bool(movie_source(disc,name)) != (campaign/(name+'.mpv')).is_file():
+            raise ValueError(f'Rebuild campaign movie data for {name}')
     for pattern,expected in [('cast/*.actor',47),('cases/*.mesh',5),('pages/*.565',211),('weapons/*.mesh',13),('weapons/*.motion',13),('weapons/*.fx',13),('loading/*.565',69)]:
         if len(list(campaign.glob(pattern)))!=expected:raise ValueError('Incomplete '+pattern)
     if not (assets/"weapons.ui").is_file():raise ValueError("Missing Xbox weapon icon atlas")
     for name in ('menu.ui','pause.tex'):
         if not (assets/name).is_file():raise ValueError('Missing '+name)
-    verify_animations(Path(os.environ.get("GAME_DISC","game")),campaign)
-    verify_weapon_effects(Path(os.environ.get("GAME_DISC","game")),campaign)
+    verify_animations(disc,campaign)
+    verify_weapon_effects(disc,campaign)
     anchors=(campaign/'hit_bones.bind').read_bytes()
     if len(anchors)!=20:raise ValueError('Missing projectile bone bindings')
     import struct

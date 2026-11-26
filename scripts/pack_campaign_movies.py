@@ -9,6 +9,9 @@ import sys
 from tempfile import TemporaryDirectory
 
 import numpy as np
+from xbox_disc import movie_source
+
+MOVIES=('intro','credits','attract00','attract01')
 
 
 def pack(source, output):
@@ -52,5 +55,11 @@ if __name__=='__main__':
     parser.add_argument('disc',type=Path)
     parser.add_argument('out',type=Path)
     args=parser.parse_args()
-    for name in ('intro','credits','attract00','attract01'):
-        pack(args.disc/'english/60'/(name+'.bik'),args.out/(name+'.mpv'))
+    for name in MOVIES:
+        destination=args.out/(name+'.mpv')
+        source=movie_source(args.disc,name)
+        if source:
+            pack(source,destination)
+        else:
+            destination.unlink(missing_ok=True)
+            print(f'Movie absent from disc: {name}.bik')

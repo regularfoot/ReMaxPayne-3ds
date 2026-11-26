@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 import struct
 from dade.maxpayne import ras
+from xbox_disc import archive_root
 
 
 def verify(disc, campaign):
@@ -12,7 +13,7 @@ def verify(disc, campaign):
     assert tag==b'RPS1'
     effects={data[12+80*i:12+80*i+64].split(b'\0')[0].decode() for i in range(count)}
     checked=0
-    with (disc/'english/x_data.ras').open('rb') as file, mmap.mmap(file.fileno(),0,access=mmap.ACCESS_READ) as archive:
+    with (archive_root(disc)/'x_data.ras').open('rb') as file, mmap.mmap(file.fileno(),0,access=mmap.ACCESS_READ) as archive:
         entries={e.path.lower():e for e in ras.read_directory(archive).entries}
         for fx in sorted((campaign/'weapons').glob('*.fx')):
             path='data/database/weapons/'+fx.stem+'.txt'

@@ -19,6 +19,7 @@ from max_payne_sdk.max_kf2 import MaxKF2Reader
 from native_texture import texture
 from pack_player import affine
 from weapon_motion import pack_weapon_motion
+from xbox_disc import archive_root
 
 WEAPONS = ('beretta','deserteagle','pumpshotgun','sawedshotgun','jackhammer','ingram',
            'mp5','sniper','baseballbat','leadpipe','grenade','molotov','m79')
@@ -28,7 +29,7 @@ def pack(disc,source,out):
     names=set()
     for path in source.glob('*.json.gz'):
         names.update(item['item_name'].lower() for item in json.load(gzip.open(path))['items'])
-    with TemporaryDirectory() as tmp,(disc/'english/x_data.ras').open('rb') as f,mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as buf:
+    with TemporaryDirectory() as tmp,(archive_root(disc)/'x_data.ras').open('rb') as f,mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as buf:
         lookup={e.path.lower():e for e in ras.read_directory(buf).entries}
         # Enemies can spawn items that are never placed in a campaign map.
         names.update(m[1] for path in lookup if (m:=re.fullmatch(r'data/database/level_items/(\w+)\.txt',path)))

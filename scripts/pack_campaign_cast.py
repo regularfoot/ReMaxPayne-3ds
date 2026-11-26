@@ -8,6 +8,7 @@ import re
 from dade.maxpayne import ras
 from native_texture import texture
 from pack_player import pack_player
+from xbox_disc import archive_root
 
 
 def pack(disc,source,out):
@@ -15,7 +16,7 @@ def pack(disc,source,out):
     skins=set()
     for path in source.glob('*.json.gz'):
         skins.update(x['character_name'].lower() for x in json.load(gzip.open(path))['characters'])
-    with (disc/'english/x_data.ras').open('rb') as f,mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as data:
+    with (archive_root(disc)/'x_data.ras').open('rb') as f,mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as data:
         lookup={e.path.lower():e for e in ras.read_directory(data).entries}
         def read(path):return ras.member_bytes(data,lookup[path.lower()])
         errors=[]

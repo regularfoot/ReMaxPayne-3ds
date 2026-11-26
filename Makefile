@@ -1,12 +1,14 @@
 DEVKITPRO ?= /opt/devkitpro
 DEVKITARM ?= $(DEVKITPRO)/devkitARM
+MP_LANG ?= auto
+export MP_LANG
 CC_HOST ?= cc
 HOST_FLAGS = -std=c11 -O2 -Wall -Wextra -Werror -pedantic
 .DEFAULT_GOAL := native
 .PHONY: native test
 
 native:
-	DEVKITPRO="$(DEVKITPRO)" DEVKITARM="$(DEVKITARM)" python3 scripts/build_native.py
+	DEVKITPRO="$(DEVKITPRO)" DEVKITARM="$(DEVKITARM)" GAME_DISC="$(GAME_DISC)" $(ASSET_PYTHON) scripts/build_native.py
 	@mkdir -p dist/native/3ds/maxpayne
 	cp build/native/maxpayne-native.3dsx dist/native/3ds/maxpayne/maxpayne.3dsx
 

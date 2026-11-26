@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 from dade.maxpayne import ras
 from max_payne_sdk.max_ldb import MaxLDBReader, EntityProperties, parseType, read_count
 from pack_native import member
+from xbox_disc import archive_root, revision
 
 
 class CampaignReader(MaxLDBReader):
@@ -94,4 +95,5 @@ if __name__ == '__main__':
     parser.add_argument('disc', type=Path)
     parser.add_argument('output', type=Path)
     args = parser.parse_args()
-    extract(args.disc / 'english', args.output)
+    print(f'Xbox {revision(args.disc)} disc',flush=True)
+    extract(archive_root(args.disc), args.output)

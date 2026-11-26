@@ -13,6 +13,7 @@ from dade.maxpayne import ras
 from max_payne_sdk.max_type import parseType
 from native_texture import texture, _tile, RGBA4
 from rps_layers import parse_layers, selected_frames
+from xbox_disc import archive_root
 
 CELL = 16
 PER_PAGE = 64
@@ -55,7 +56,7 @@ def pack(disc, output):
     # Addresses are (sheet, column, row, vertical flip); all shipped pixels come from the DVD.
     coordinates=json.loads(Path(__file__).with_name('particle_cells.json').read_text())
     slots={};sprites=[];definitions=[];shape_curves=[];groups=[];layers=[];variants=[];lifetimes=[];drag=[]
-    with (disc/'english/x_data.ras').open('rb') as file, mmap.mmap(file.fileno(),0,access=mmap.ACCESS_READ) as archive:
+    with (archive_root(disc)/'x_data.ras').open('rb') as file, mmap.mmap(file.fileno(),0,access=mmap.ACCESS_READ) as archive:
         entries = {e.path.lower():e for e in ras.read_directory(archive).entries}
         def read(path):
             return ras.member_bytes(archive,entries[path])

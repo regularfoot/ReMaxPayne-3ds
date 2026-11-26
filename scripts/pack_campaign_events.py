@@ -14,6 +14,7 @@ from dade.maxpayne import ras
 from pack_native import member
 from skin_poses import slots,definitions
 from pack_campaign_cameras import catalog as camera_catalog
+from xbox_disc import archive_root
 
 NONE=65535
 START,SWITCH,SEND,EVENT,LEAVE,ARRIVE,RETURN,DEATH,ACTIVATE,SPECIAL=range(10)
@@ -296,9 +297,9 @@ if __name__=='__main__':
     p.add_argument('source',type=Path);p.add_argument('output',type=Path)
     p.add_argument('--disc',type=Path,default=Path('game'))
     args=p.parse_args()
-    templates=character_templates(args.disc/'english')
-    items=item_templates(args.disc/'english')
-    cameras=dict(camera_catalog(args.disc/'english'))
+    templates=character_templates(archive_root(args.disc))
+    items=item_templates(archive_root(args.disc))
+    cameras=dict(camera_catalog(archive_root(args.disc)))
     for path in sorted(args.source.glob('*.json.gz')):
         dest=args.output/(path.name.split('.')[0]+'.evt')
         temp=dest.with_suffix('.partial')

@@ -6,11 +6,12 @@ from PIL import Image
 from dade.maxpayne import ras
 from dade.maxpayne.model import read_model
 from native_texture import texture
+from xbox_disc import archive_root
 
 def pack(disc,out):
     dest=out/'faces';dest.mkdir(parents=True,exist_ok=True)
     path='data/database/skins/'
-    with (disc/'english/x_data.ras').open('rb') as file,mmap.mmap(file.fileno(),0,access=mmap.ACCESS_READ) as data:
+    with (archive_root(disc)/'x_data.ras').open('rb') as file,mmap.mmap(file.fileno(),0,access=mmap.ACCESS_READ) as data:
         entries={e.path.lower():e for e in ras.read_directory(data).entries}
         def read(k):return ras.member_bytes(data,entries[k])
         for name in sorted({'max_payne','young_max_payne'}|{p.stem for p in (out/'cast').glob('*.actor')}):

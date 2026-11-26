@@ -14,6 +14,7 @@ from PIL import Image, ImageFilter, ImageOps
 from dade.maxpayne import ldb, ras
 
 from native_texture import texture
+from xbox_disc import archive_root, language
 
 
 def member(archive, path):
@@ -212,9 +213,10 @@ if __name__ == '__main__':
     parser.add_argument('output', type=Path)
     args = parser.parse_args()
     args.output.mkdir(exist_ok=True, parents=True)
-    archives = args.disc / 'english'
+    archives = archive_root(args.disc)
+    locale = language(args.disc)
     from pack_ui import lower_ui
-    lower_ui(archives,args.output)
+    lower_ui(archives,args.output,locale)
     write_screen(member(archives/'x_english.ras', 'data/menu/bitmaps/menu_bg_mainmenu.dds'), args.output/'menu.565')
     from pack_mission import IDS, HOUSE_IDS
     from pack_neighbours import portals, worldsphere, link_room
@@ -264,3 +266,4 @@ if __name__ == '__main__':
         wav = archives/'data/database/sounds'/(sound+'.wav')
         subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-y', '-i', wav, '-ac', '1',
                         '-ar', '22050', '-f', 's16le', args.output/output], check=True)
+    (args.output/'language.txt').write_text(locale+'\n')

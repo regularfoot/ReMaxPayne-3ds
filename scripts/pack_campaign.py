@@ -18,6 +18,7 @@ from native_texture import texture
 from pack_native import member
 from pack_neighbours import worldsphere
 from triangulate import triangulate
+from xbox_disc import archive_root
 
 
 def vec(p):
@@ -226,7 +227,7 @@ def pack_lights(level, dest):
 
 
 def pack(disc,out,only,force=False,texture_limit=128):
-    arcs=disc/'english'
+    arcs=archive_root(disc)
     out.mkdir(parents=True,exist_ok=True)
     @lru_cache(None)
     def sky(name):return worldsphere(arcs/'x_data.ras',member,name) if name else []

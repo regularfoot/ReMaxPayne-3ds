@@ -1,3 +1,4 @@
+#include "language.h"
 #include "campaign_file.h"
 #include "render.h"
 #include "phone.h"
@@ -41,7 +42,7 @@ static const char *areas[]={"StartRoom","Alley2","Street","Subway","Side alley",
 typedef struct { unsigned ammo,reserve,capacity; } Magazine;
 static void instructions(const Mission *m,const char *prompt,const Magazine *mag,Weapon weapon,bool loading,unsigned zoom,bool stance,bool crouched) {
     unsigned count=mission_gunmen(m);
-    static const char *const map_names[]={"Двор","Переулок","Улица","Метро","Боковой переулок","Тупик","Прихожая","Телефон","Гостиная","Лестница"};
+    static const char *const map_names[]={MP_TEXT("Двор","Yard"),MP_TEXT("Переулок","Alley"),MP_TEXT("Улица","Street"),MP_TEXT("Метро","Subway"),MP_TEXT("Боковой переулок","Side Alley"),MP_TEXT("Тупик","Dead End"),MP_TEXT("Прихожая","Hallway"),MP_TEXT("Телефон","Phone"),MP_TEXT("Гостиная","Living Room"),MP_TEXT("Лестница","Stairs")};
     ui_begin_update();
     ui_hud(map_names[m->room],prompt,NULL,m->health,m->painkillers,
            m->room>=HOME && !m->house.armed?-1:(int)weapon,mag->ammo,mag->reserve,loading,zoom,m->van,
@@ -484,7 +485,7 @@ int main(void) {
             if(!ui_title()) break;
             if(!ok) {
                 if(journal) {fputs("ROOM load failed\n",journal);fflush(journal);}
-                ui_notice("Ошибка загрузки уровня");
+                ui_notice(MP_TEXT("Ошибка загрузки уровня","Could not load level"));
             } else memory_report("MENU_RETURN",begin);
         }
     } else {

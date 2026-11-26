@@ -15,6 +15,7 @@ from PIL import Image
 from dade.maxpayne import ras
 from max_payne_sdk.max_type import parseType
 from rps_layers import parse_layers, selected_frames
+from xbox_disc import archive_root
 
 BASE='data/database/particles/'
 
@@ -61,7 +62,7 @@ def candidates(pages,w,h,additive):
 def build(disc,obb,output):
     images=mobile_materials(obb)
     result={}
-    with (disc/'english/x_data.ras').open('rb') as f,mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as archive:
+    with (archive_root(disc)/'x_data.ras').open('rb') as f,mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as archive:
         files={e.path.lower():e for e in ras.read_directory(archive).entries}
         for path,entry in files.items():
             if not path.endswith('.rps'):continue

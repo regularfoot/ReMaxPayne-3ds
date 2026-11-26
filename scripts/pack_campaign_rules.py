@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 import struct
 from pack_native import member
+from xbox_disc import archive_root
 
 MODES = ('normal', 'nightmare', 'hell', 'timedmode')
 FIELDS = ('EnemyHealthMultiplier', 'AmmoFoundMultiplier', 'PlayerHealthMultiplier',
@@ -17,7 +18,7 @@ def scalar(value):
     return float(value.rstrip('%')) / (100 if value.endswith('%') else 1)
 
 def pack(disc, out):
-    archive = disc/'english/x_data.ras'
+    archive = archive_root(disc)/'x_data.ras'
     def read(name):
         return re.sub(r'//[^\r\n]*', '', member(archive,name).decode('latin1'))
     difficulty = read('data/difficulty.txt')

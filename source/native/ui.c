@@ -1,3 +1,4 @@
+#include "language.h"
 #include "campaign_file.h"
 #include "ui.h"
 #include "touch.h"
@@ -86,7 +87,7 @@ static void label(int x,int y,int size,const char *str,uint16_t color,int right)
 }
 void ui_pause_image(uint16_t *fb){
     for(unsigned i=0;i<400*H;i++)fb[i]=(fb[i]>>1)&0x7bef;
-    const char *word="ПАУЗА";const unsigned char *s=(const unsigned char*)word;unsigned width=0;
+    const char *word=MP_TEXT("ПАУЗА","PAUSE");const unsigned char *s=(const unsigned char*)word;unsigned width=0;
     while(*s)width+=art.font[2][character(&s)].advance;
     int x=(400-width)/2;
     label_to(fb,x+1,106,2,word,BLACK,400);label_to(fb,x,105,2,word,WHITE,400);
@@ -228,31 +229,31 @@ typedef struct {const char *name;int action,argument;} Entry;
 typedef struct {const char *name;const Entry *list;int count;enum Page parent;} PageDef;
 enum Setting { HORIZ,VERT,DEAD,VOLUME,MUSIC,INVERT,TIPS,RETICLE,AUTOAIM,LOCK,AUTOSWITCH,SLOW_ASSIST,RECENTER,QUICKAIM,GYRO_AIM,GYRO_HORIZONTAL,GYRO_VERTICAL };
 static const Entry root[]={
-    {"Продолжить",RESUME,0},{"Обучение",SUB,TRAIN_MENU},{"Новая игра",SUB,DIFFICULTY},{"Загрузка",SUB,LOAD_SLOTS},
-    {"Сохранение",SUB,SAVE_SLOTS},{"Настройки",SUB,OPTIONS},{"Авторы",SUB,CREDITS},{"Выход",SUB,QUIT}};
-static const Entry training[]={{"Обучение",AUTHORED,0},{"Тренировочные раунды",TRAIN,0}};
-static const Entry difficulty[]={{"Беглец",NEWGAME,FUGITIVE},{"Крутой коп",NEWGAME,HARD_BOILED},{"Смерть по прибытии",NEWGAME,DEAD_ON_ARRIVAL},{"Минута Нью-Йорка",NEWGAME,NEW_YORK_MINUTE},{"Последняя схватка",BONUS,0}};
-static const Entry options[]={{"Схемы управления",SUB,SETS},{"Управление",SUB,CONTROLS},{"Игра",SUB,GENERAL},{"Звук",SUB,SOUND},{"Анимации персонажа",ANIMATIONS,0}};
-static const Entry sets[]={{"1   Стандарт",PRESET,0},{"2   Левша",PRESET,1},{"3   Кнопки X / Y",PRESET,2},{"4   Левша и X / Y",PRESET,3}};
-static const Entry controls[]={{"Движение",SUB,MOVE},{"Бой и камера",SUB,COMBAT},{"Оружие",SUB,WEAPONS},{"Гироскоп",SUB,GYRO_MENU}};
-static const Entry gyro_options[]={{"Управление наклоном",CHANGE,GYRO_AIM},{"По горизонтали",CHANGE,GYRO_HORIZONTAL},{"По вертикали",CHANGE,GYRO_VERTICAL}};
-static const Entry movement[]={{"Движение   /   Circle Pad",INFO,0},{"Присесть",INFO,1},{"Прыжок   /   B",INFO,0},{"Действие   /   A",INFO,0},{"Bullet Time   /   ZL",INFO,2},{"Прыжок с уклонением",INFO,3}};
-static const Entry combat[]={{"Выстрел   /   R",INFO,0},{"Перезарядка   /   X",INFO,0},{"Болеутоляющее   /   SELECT",INFO,0},{"Быстрый прицел",CHANGE,QUICKAIM},{"Камера по горизонтали",CHANGE,HORIZ},{"Камера по вертикали",CHANGE,VERT},{"Инверсия камеры",CHANGE,INVERT}};
-static const Entry weapons[]={{"Иконка оружия / Y",INFO,0},{"Холодное оружие",INFO,0},{"Пистолеты",INFO,0},{"Дробовики",INFO,0},{"Автоматы",INFO,0},{"Метательное оружие",INFO,0},{"Снайперская винтовка",INFO,4}};
-static const Entry general[]={{"Настройка прицела",CHANGE,RETICLE},{"Мёртвая зона стика",CHANGE,DEAD},{"Автоприцел",CHANGE,AUTOAIM},{"Захват цели",CHANGE,LOCK},{"Автосмена оружия",CHANGE,AUTOSWITCH},{"Подсказки",CHANGE,TIPS},{"Помощь Bullet Time",CHANGE,SLOW_ASSIST},{"Возврат камеры",CHANGE,RECENTER}};
-static const Entry sound[]={{"Громкость музыки",CHANGE,MUSIC},{"Громкость звука",CHANGE,VOLUME}};
-static const Entry quit[]={{"Назад",BACK,0},{"Выйти",LEAVE,0}};
+    {MP_TEXT("Продолжить","Continue"),RESUME,0},{MP_TEXT("Обучение","Tutorial"),SUB,TRAIN_MENU},{MP_TEXT("Новая игра","New Game"),SUB,DIFFICULTY},{MP_TEXT("Загрузка","Load Game"),SUB,LOAD_SLOTS},
+    {MP_TEXT("Сохранение","Save Game"),SUB,SAVE_SLOTS},{MP_TEXT("Настройки","Options"),SUB,OPTIONS},{MP_TEXT("Авторы","Credits"),SUB,CREDITS},{MP_TEXT("Выход","Exit"),SUB,QUIT}};
+static const Entry training[]={{MP_TEXT("Обучение","Tutorial"),AUTHORED,0},{MP_TEXT("Тренировочные раунды","Practice Rounds"),TRAIN,0}};
+static const Entry difficulty[]={{MP_TEXT("Беглец","Fugitive"),NEWGAME,FUGITIVE},{MP_TEXT("Крутой коп","Hard-Boiled"),NEWGAME,HARD_BOILED},{MP_TEXT("Смерть по прибытии","Dead on Arrival"),NEWGAME,DEAD_ON_ARRIVAL},{MP_TEXT("Минута Нью-Йорка","New York Minute"),NEWGAME,NEW_YORK_MINUTE},{MP_TEXT("Последняя схватка","Last Challenge"),BONUS,0}};
+static const Entry options[]={{MP_TEXT("Схемы управления","Control Presets"),SUB,SETS},{MP_TEXT("Управление","Controls"),SUB,CONTROLS},{MP_TEXT("Игра","Gameplay"),SUB,GENERAL},{MP_TEXT("Звук","Sound"),SUB,SOUND},{MP_TEXT("Анимации персонажа","Character Animations"),ANIMATIONS,0}};
+static const Entry sets[]={{MP_TEXT("1   Стандарт","1   Standard"),PRESET,0},{MP_TEXT("2   Левша","2   Left-Handed"),PRESET,1},{MP_TEXT("3   Кнопки X / Y","3   Swap X / Y"),PRESET,2},{MP_TEXT("4   Левша и X / Y","4   Left-Handed + X / Y"),PRESET,3}};
+static const Entry controls[]={{MP_TEXT("Движение","Movement"),SUB,MOVE},{MP_TEXT("Бой и камера","Combat and Camera"),SUB,COMBAT},{MP_TEXT("Оружие","Weapons"),SUB,WEAPONS},{MP_TEXT("Гироскоп","Gyroscope"),SUB,GYRO_MENU}};
+static const Entry gyro_options[]={{MP_TEXT("Управление наклоном","Tilt to Aim"),CHANGE,GYRO_AIM},{MP_TEXT("По горизонтали","Horizontal"),CHANGE,GYRO_HORIZONTAL},{MP_TEXT("По вертикали","Vertical"),CHANGE,GYRO_VERTICAL}};
+static const Entry movement[]={{MP_TEXT("Движение   /   Circle Pad","Move   /   Circle Pad"),INFO,0},{MP_TEXT("Присесть","Crouch"),INFO,1},{MP_TEXT("Прыжок   /   B","Jump   /   B"),INFO,0},{MP_TEXT("Действие   /   A","Interact   /   A"),INFO,0},{"Bullet Time   /   ZL",INFO,2},{MP_TEXT("Прыжок с уклонением","Shoot-Dodge"),INFO,3}};
+static const Entry combat[]={{MP_TEXT("Выстрел   /   R","Fire   /   R"),INFO,0},{MP_TEXT("Перезарядка   /   X","Reload   /   X"),INFO,0},{MP_TEXT("Болеутоляющее   /   SELECT","Painkiller   /   SELECT"),INFO,0},{MP_TEXT("Быстрый прицел","Quick Aim"),CHANGE,QUICKAIM},{MP_TEXT("Камера по горизонтали","Horizontal Camera"),CHANGE,HORIZ},{MP_TEXT("Камера по вертикали","Vertical Camera"),CHANGE,VERT},{MP_TEXT("Инверсия камеры","Invert Camera"),CHANGE,INVERT}};
+static const Entry weapons[]={{MP_TEXT("Иконка оружия / Y","Weapon Icon / Y"),INFO,0},{MP_TEXT("Холодное оружие","Melee Weapons"),INFO,0},{MP_TEXT("Пистолеты","Pistols"),INFO,0},{MP_TEXT("Дробовики","Shotguns"),INFO,0},{MP_TEXT("Автоматы","Automatic Weapons"),INFO,0},{MP_TEXT("Метательное оружие","Throwables"),INFO,0},{MP_TEXT("Снайперская винтовка","Sniper Rifle"),INFO,4}};
+static const Entry general[]={{MP_TEXT("Настройка прицела","Reticle"),CHANGE,RETICLE},{MP_TEXT("Мёртвая зона стика","Stick Dead Zone"),CHANGE,DEAD},{MP_TEXT("Автоприцел","Auto Aim"),CHANGE,AUTOAIM},{MP_TEXT("Захват цели","Target Lock"),CHANGE,LOCK},{MP_TEXT("Автосмена оружия","Auto Weapon Switch"),CHANGE,AUTOSWITCH},{MP_TEXT("Подсказки","Hints"),CHANGE,TIPS},{MP_TEXT("Помощь Bullet Time","Bullet Time Assist"),CHANGE,SLOW_ASSIST},{MP_TEXT("Возврат камеры","Recenter Camera"),CHANGE,RECENTER}};
+static const Entry sound[]={{MP_TEXT("Громкость музыки","Music Volume"),CHANGE,MUSIC},{MP_TEXT("Громкость звука","Sound Volume"),CHANGE,VOLUME}};
+static const Entry quit[]={{MP_TEXT("Назад","Back"),BACK,0},{MP_TEXT("Выйти","Quit"),LEAVE,0}};
 #define PAGE(title,items,up) {title,items,sizeof(items)/sizeof(*items),up}
-static const PageDef pages[]={PAGE("Главное меню",root,ROOT),PAGE("Сложность",difficulty,ROOT),PAGE("Настройки",options,ROOT),
-    PAGE("Схемы управления",sets,OPTIONS),PAGE("Управление",controls,OPTIONS),PAGE("Движение",movement,CONTROLS),
-    PAGE("Бой и камера",combat,CONTROLS),PAGE("Оружие",weapons,CONTROLS),PAGE("Игра",general,OPTIONS),
-    PAGE("Звук",sound,OPTIONS),{"Авторы",NULL,0,ROOT},PAGE("Выход",quit,ROOT),{"Загрузка",NULL,SAVE_COUNT,ROOT},{"Сохранение",NULL,SAVE_COUNT-2,ROOT},PAGE("Обучение",training,ROOT),
-    PAGE("Гироскоп",gyro_options,CONTROLS)};
+static const PageDef pages[]={PAGE(MP_TEXT("Главное меню","Main Menu"),root,ROOT),PAGE(MP_TEXT("Сложность","Difficulty"),difficulty,ROOT),PAGE(MP_TEXT("Настройки","Options"),options,ROOT),
+    PAGE(MP_TEXT("Схемы управления","Control Presets"),sets,OPTIONS),PAGE(MP_TEXT("Управление","Controls"),controls,OPTIONS),PAGE(MP_TEXT("Движение","Movement"),movement,CONTROLS),
+    PAGE(MP_TEXT("Бой и камера","Combat and Camera"),combat,CONTROLS),PAGE(MP_TEXT("Оружие","Weapons"),weapons,CONTROLS),PAGE(MP_TEXT("Игра","Gameplay"),general,OPTIONS),
+    PAGE(MP_TEXT("Звук","Sound"),sound,OPTIONS),{MP_TEXT("Авторы","Credits"),NULL,0,ROOT},PAGE(MP_TEXT("Выход","Exit"),quit,ROOT),{MP_TEXT("Загрузка","Load Game"),NULL,SAVE_COUNT,ROOT},{MP_TEXT("Сохранение","Save Game"),NULL,SAVE_COUNT-2,ROOT},PAGE(MP_TEXT("Обучение","Tutorial"),training,ROOT),
+    PAGE(MP_TEXT("Гироскоп","Gyroscope"),gyro_options,CONTROLS)};
 void ui_animation_card(const char *name,unsigned clip,unsigned total){
-    char caption[64];heading("Анимации персонажа");snprintf(caption,sizeof caption,"%u / %u",clip,total);
+    char caption[64];heading(MP_TEXT("Анимации персонажа","Character Animations"));snprintf(caption,sizeof caption,"%u / %u",clip,total);
     label(12,57,0,caption,MUTED,310);paragraph(12,83,0,name,3,WHITE);
-    tile(8,153,148,37,"Предыдущая",true,false,-1);tile(164,153,148,37,"Следующая",true,false,-1);
-    footer("L / R   Через 10     •     B   Назад");flush();
+    tile(8,153,148,37,MP_TEXT("Предыдущая","Previous"),true,false,-1);tile(164,153,148,37,MP_TEXT("Следующая","Next"),true,false,-1);
+    footer(MP_TEXT("L / R   Через 10     •     B   Назад","L / R   Skip 10     /     B   Back"));flush();
 }
 static uint8_t *setting(int id) {
     switch(id){case HORIZ:return &ui_settings.horizontal;case VERT:return &ui_settings.vertical;
@@ -301,22 +302,22 @@ static void refresh_slots(void) {
     }
 }
 static const char *binding_label(const Entry *e) {
-    if(!strcmp(e->name,"Bullet Time   /   ZL") && !new_model)return "Bullet Time   /   экран";
-    if(!strcmp(e->name,"Выстрел   /   R") && (ui_settings.scheme&1))return "Выстрел   /   L";
-    if(!strcmp(e->name,"Перезарядка   /   X") && (ui_settings.scheme&2))return "Перезарядка   /   Y";
-    if(!strcmp(e->name,"Выбор оружия   /   Y") && (ui_settings.scheme&2))return "Выбор оружия   /   X";
+    if(!strcmp(e->name,"Bullet Time   /   ZL") && !new_model)return MP_TEXT("Bullet Time   /   экран","Bullet Time   /   Touch Screen");
+    if(!strcmp(e->name,MP_TEXT("Выстрел   /   R","Fire   /   R")) && (ui_settings.scheme&1))return MP_TEXT("Выстрел   /   L","Fire   /   L");
+    if(!strcmp(e->name,MP_TEXT("Перезарядка   /   X","Reload   /   X")) && (ui_settings.scheme&2))return MP_TEXT("Перезарядка   /   Y","Reload   /   Y");
+    if(!strcmp(e->name,MP_TEXT("Выбор оружия   /   Y","Select Weapon   /   Y")) && (ui_settings.scheme&2))return MP_TEXT("Выбор оружия   /   X","Select Weapon   /   X");
     return e->name;
 }
 static void control_help(enum Page page,const Entry *entry) {
     const char *detail=binding_label(entry);
-    if(page==SETS) detail="Circle Pad   /   C-Stick   /   стилус";
-    if(page==WEAPONS) detail=(ui_settings.scheme&2)?"X   Сменить оружие":"Y   Сменить оружие";
-    if(entry->argument==1) detail="Коснитесь кнопки «Присесть»";
-    if(entry->argument==2) detail=new_model?"ZL: вкл./выкл. без прыжка. Или шкала BT":"Коснитесь шкалы Bullet Time";
-    if(entry->argument==3) detail=(ui_settings.scheme&1)?"Наклоните Circle Pad и нажмите R":"Наклоните Circle Pad и нажмите L";
-    if(entry->argument==4) detail="A   Сменить увеличение прицела";
+    if(page==SETS) detail=MP_TEXT("Circle Pad   /   C-Stick   /   стилус","Circle Pad   /   C-Stick   /   Stylus");
+    if(page==WEAPONS) detail=(ui_settings.scheme&2)?MP_TEXT("X   Сменить оружие","X   Change Weapon"):MP_TEXT("Y   Сменить оружие","Y   Change Weapon");
+    if(entry->argument==1) detail=MP_TEXT("Коснитесь кнопки «Присесть»","Tap Crouch on the touch screen");
+    if(entry->argument==2) detail=new_model?MP_TEXT("ZL: вкл./выкл. без прыжка. Или шкала BT","ZL toggles slow motion"):MP_TEXT("Коснитесь шкалы Bullet Time","Tap the Bullet Time meter");
+    if(entry->argument==3) detail=(ui_settings.scheme&1)?MP_TEXT("Наклоните Circle Pad и нажмите R","Move and press R"):MP_TEXT("Наклоните Circle Pad и нажмите L","Move and press L");
+    if(entry->argument==4) detail=MP_TEXT("A   Сменить увеличение прицела","A   Change scope magnification");
     heading(pages[page].name);label(32,79,1,binding_label(entry),WHITE,316);
-    label(32,117,0,detail,PAPER,316);label(32,173,1,"Назад",WHITE,310);flush();
+    label(32,117,0,detail,PAPER,316);label(32,173,1,MP_TEXT("Назад","Back"),WHITE,310);flush();
     while(aptMainLoop()) {
         bank_tick();hidScanInput();
         if(hidKeysDown()&(KEY_A|KEY_B|KEY_TOUCH|KEY_START)) break;
@@ -356,17 +357,17 @@ static void draw_menu(enum Page page,int selected,int top,bool paused,int card) 
     if(page==CREDITS) {
         label(18,78,1,"Remedy Entertainment",WHITE,311);
         label(18,106,0,"2001",MUTED,311);
-        menu_line(18,170,0,card?"Предыдущая страница":"Следующая страница",true,true,310);
+        menu_line(18,170,0,card?MP_TEXT("Предыдущая страница","Previous Page"):MP_TEXT("Следующая страница","Next Page"),true,true,310);
     } else for(int k=0;k<menu_rows(page) && k+top<p->count;k++) {
         int i=k+top,y=(page==ROOT?ROOT_Y:MENU_Y)+menu_pitch(page)*k;
         if(page==LOAD_SLOTS || page==SAVE_SLOTS) {
             unsigned slot=i+(page==SAVE_SLOTS?2:0);
             char prefix[40];
-            if(!slot)strcpy(prefix,"Автосохранение");
-            else if(slot==1)strcpy(prefix,"Быстрое сохранение");
-            else snprintf(prefix,sizeof prefix,"Ячейка %u",slot-1);
+            if(!slot)strcpy(prefix,MP_TEXT("Автосохранение","Autosave"));
+            else if(slot==1)strcpy(prefix,MP_TEXT("Быстрое сохранение","Quicksave"));
+            else snprintf(prefix,sizeof prefix,MP_TEXT("Ячейка %u","Slot %u"),slot-1);
             menu_line(32,y,1,prefix,page==SAVE_SLOTS || slot_valid[slot],i==selected,296);
-            label(33,y+24,0,slot_valid[slot]?slot_info[slot].room:"Пусто",MUTED,296);continue;
+            label(33,y+24,0,slot_valid[slot]?slot_info[slot].room:MP_TEXT("Пусто","Empty"),MUTED,296);continue;
         }
         const Entry *e=&p->list[i];const char *name=binding_label(e);
         int size=1,x=page==ROOT?18:32;
@@ -376,7 +377,7 @@ static void draw_menu(enum Page page,int selected,int top,bool paused,int card) 
             y+=23;
             unsigned value=*setting(e->argument);
             if(gyro_sensitivity(e->argument))draw_gyro_percent(y,value);
-            else if(e->argument==RETICLE){const char *styles[]={"Крест","Точка","Круг"};label(227,y,0,styles[value],PAPER,303);}
+            else if(e->argument==RETICLE){const char *styles[]={MP_TEXT("Крест","Crosshair"),MP_TEXT("Точка","Dot"),MP_TEXT("Круг","Circle")};label(227,y,0,styles[value],PAPER,303);}
             else if(e->argument>=INVERT)menu_sprite(menu_art.toggles[value!=0],18,18,275,y+2);
             else{
                 menu_sprite(menu_art.slider,112,14,182,y+9);
@@ -388,9 +389,9 @@ static void draw_menu(enum Page page,int selected,int top,bool paused,int card) 
         if(top)label(303,58,1,"^",PAPER,319);
         if(top+menu_rows(page)<p->count)label(303,185,1,"v",PAPER,319);
     }
-    const char *hint=page==GYRO_MENU?"Влево / вправо   Изменить     B   Назад":page==ROOT?
-        (paused && allow_save?"X   Сохранить   /   Y   Загрузить":"A   Выбрать   /   Касание"):
-        "B   Назад     /     A   Выбрать";
+    const char *hint=page==GYRO_MENU?MP_TEXT("Влево / вправо   Изменить     B   Назад","Left / Right   Adjust    B   Back"):page==ROOT?
+        (paused && allow_save?MP_TEXT("X   Сохранить   /   Y   Загрузить","X   Quicksave   /   Y   Quickload"):MP_TEXT("A   Выбрать   /   Касание","A   Select   /   Touch")):
+        MP_TEXT("B   Назад     /     A   Выбрать","B   Back     /     A   Select");
     label(10,220,0,hint,MUTED,314);flush();
 }
 static UiChoice menu_loop(bool paused,bool can_save,UiPauseFrame redraw,void *context) {
@@ -513,12 +514,12 @@ UiChoice ui_pause_menu(bool can_save,UiPauseFrame redraw,void *context){return m
 static int last_dir=-1,last_distance=-1;
 void ui_hud(const char *area,const char *objective,const char *weapon_name,unsigned health,unsigned pills,int weapon,
             unsigned ammo,unsigned reserve,bool reloading,unsigned zoom,bool can_switch,unsigned round,unsigned remaining,bool force_prompt) {
-    static const char *names[]={"Беретта","Дробовик","Винтовка"};
+    static const char *names[]={MP_TEXT("Беретта","Beretta"),MP_TEXT("Дробовик","Pump Shotgun"),MP_TEXT("Винтовка","Rifle")};
     char text[80];
     box(0,0,W,H,BLACK);
     box(0,0,320,25,PANEL);box(0,24,320,1,RED);
     label(9,2,1,area,PAPER,200);
-    label(233,4,0,"START   Пауза",MUTED,316);
+    label(233,4,0,MP_TEXT("START   Пауза","START Pause"),MUTED,316);
     for(int y=0;y<51;y++) for(int x=0;x<23;x++) if(art.silhouette[y][x]>85)
         box(9+x,32+y,1,1,y<51-(int)(health*51/100)?RED:PAPER);
     snprintf(text,sizeof text,"%u%%",health);
@@ -526,26 +527,26 @@ void ui_hud(const char *area,const char *objective,const char *weapon_name,unsig
     snprintf(text,sizeof text,"+ %u",pills);
     label(39,59,0,text,pills?PAPER:GREY,89);
     box(88,34,1,49,LINE);
-    label(99,31,0,weapon<0?"Без оружия":weapon_name?weapon_name:names[weapon],MUTED,211);
+    label(99,31,0,weapon<0?MP_TEXT("Без оружия","Unarmed"):weapon_name?weapon_name:names[weapon],MUTED,211);
     if(weapon>=0) {
         snprintf(text,sizeof text,"%u / %u",ammo,reserve);label(98,49,2,text,WHITE,224);
     }
-    if (reloading) label(219,55,0,"Перезарядка",ACCENT,316);
-    else if (weapon==2 && zoom) {snprintf(text,sizeof text,"Прицел  %ux",zoom);label(226,55,0,text,PAPER,317);}
+    if (reloading) label(219,55,0,MP_TEXT("Перезарядка","Reloading"),ACCENT,316);
+    else if (weapon==2 && zoom) {snprintf(text,sizeof text,MP_TEXT("Прицел  %ux","Scope  %ux"),zoom);label(226,55,0,text,PAPER,317);}
     if (round || remaining) {
-        if(round) snprintf(text,sizeof text,"Раунд %u   /   Целей %u",round,remaining);
-        else snprintf(text,sizeof text,"Целей %u",remaining);
+        if(round) snprintf(text,sizeof text,MP_TEXT("Раунд %u   /   Целей %u","Round %u   /   Targets %u"),round,remaining);
+        else snprintf(text,sizeof text,MP_TEXT("Целей %u","Targets %u"),remaining);
         label(169,28,0,text,ACCENT,316);
     }
     box(8,94,304,1,LINE);
     if (ui_settings.tips || force_prompt || !health) {
-        label(164,103,0,"ЗАДАЧА",ACCENT,245);
+        label(164,103,0,MP_TEXT("ЗАДАЧА","OBJECTIVE"),ACCENT,245);
         paragraph_step(10,118,1,objective,2,PAPER,20);
     }
     (void)can_switch;
     if(ui_touch_shortcuts()){
         TouchRect f=touch_rects[TOUCH_FIRE];
-        tile(f.x,f.y,f.w,f.h,"Огонь",weapon>=0,false,-1);
+        tile(f.x,f.y,f.w,f.h,MP_TEXT("Огонь","Fire"),weapon>=0,false,-1);
     }
     last_dir=last_distance=-1;flush();
 }
@@ -571,19 +572,19 @@ void ui_weapon_close(void){weapon_picker.open=false;}
 void ui_weapon_palette(uint32_t owned,uint32_t loaded,int current){
     TouchRect r=touch_rects[TOUCH_WEAPON];box(r.x,r.y,r.w,r.h,PANEL);
     weapon_icon(r.x+6,r.y+6,current,current>=0?PAPER:GREY);
-    if(current<0)label(r.x+7,r.y+10,0,"Оружие",owned?PAPER:GREY,r.x+r.w);
+    if(current<0)label(r.x+7,r.y+10,0,MP_TEXT("Оружие","Weapons"),owned?PAPER:GREY,r.x+r.w);
     if(weapon_picker.open){
         box(0,25,320,215,BLACK);
-        label(8,27,0,"ОРУЖИЕ",PAPER,108);
-        label(113,27,0,"Коснись значка для выбора",MUTED,315);
+        label(8,27,0,MP_TEXT("ОРУЖИЕ","WEAPONS"),PAPER,108);
+        label(113,27,0,MP_TEXT("Коснись значка для выбора","Tap a weapon to select it"),MUTED,315);
         for(unsigned i=0;i<16;i++){
             int gun=touch_weapon_order[i];TouchRect cell=touch_weapon_rect(i);
             bool selected=gun==current,available=gun<0 || (owned&(1u<<gun));
             box(cell.x,cell.y,cell.w,cell.h,selected?LINE:PANEL);
-            if(gun<0)label(cell.x+8,cell.y+13,0,"Назад",MUTED,cell.x+cell.w);
+            if(gun<0)label(cell.x+8,cell.y+13,0,MP_TEXT("Назад","Back"),MUTED,cell.x+cell.w);
             else if(gun<TOUCH_WEAPON_COUNT){
-                static const char *short_name[]={"Беретта","2 Беретты","D. Eagle","Помпа","Обрез","Jackhammer",
-                    "Ingram","2 Ingram","Commando","Снайперка","Бита","Труба","Граната","Молотов","M79"};
+                static const char *short_name[]={MP_TEXT("Беретта","Beretta"),MP_TEXT("2 Беретты","2 Berettas"),"D. Eagle",MP_TEXT("Помпа","Pump"),MP_TEXT("Обрез","Sawed-Off"),"Jackhammer",
+                    "Ingram","2 Ingram","Commando",MP_TEXT("Снайперка","Sniper"),MP_TEXT("Бита","Baseball Bat"),MP_TEXT("Труба","Lead Pipe"),MP_TEXT("Граната","Grenade"),MP_TEXT("Молотов","Molotov"),"M79"};
                 weapon_icon(cell.x+6,cell.y+2,gun,!available?GREY:selected?WHITE:PAPER);
                 label(cell.x+4,cell.y+24,0,short_name[gun],!available?GREY:(loaded&(1u<<gun)) || gun==10 || gun==11?PAPER:RED,cell.x+cell.w-2);
             }
@@ -593,11 +594,11 @@ void ui_weapon_palette(uint32_t owned,uint32_t loaded,int current){
 }
 void ui_bearing(float angle,float meters,bool alive) {
     if(!ui_settings.tips || !alive) return;
-    static const char *const dir[]={"Впереди","Справа","Сзади","Слева"};
+    static const char *const dir[]={MP_TEXT("Впереди","Ahead"),MP_TEXT("Справа","Right"),MP_TEXT("Сзади","Behind"),MP_TEXT("Слева","Left")};
     int d=fabsf(angle)<.48f?0:fabsf(angle)>2.65f?2:angle>0?1:3,dist=(int)lroundf(meters);
     if(d==last_dir && dist==last_distance) return;
     last_dir=d;last_distance=dist;
-    char text[64];snprintf(text,sizeof text,"%s   %d м",dir[d],dist);
+    char text[64];snprintf(text,sizeof text,MP_TEXT("%s   %d м","%s   %d m"),dir[d],dist);
     box(220,101,98,19,BLACK);label(222,102,0,text,MUTED,318);
     flush();
 }
@@ -610,45 +611,45 @@ void ui_combat_hud(float charge,bool slow,bool crouched,bool allowed) {
 }
 void ui_stance(bool crouched){
     TouchRect r=touch_rects[TOUCH_CROUCH];
-    box(r.x,r.y,r.w,r.h,PANEL);label(r.x+3,r.y+2,0,crouched?"Встать":"Присесть",PAPER,r.x+r.w);
+    box(r.x,r.y,r.w,r.h,PANEL);label(r.x+3,r.y+2,0,crouched?MP_TEXT("Встать","Stand"):MP_TEXT("Присесть","Crouch"),PAPER,r.x+r.w);
     if(ui_touch_shortcuts()){
         r=touch_rects[TOUCH_JUMP];
-        box(r.x,r.y,r.w,r.h,PANEL);label(r.x+3,r.y+2,0,"Прыжок",PAPER,r.x+r.w);
+        box(r.x,r.y,r.w,r.h,PANEL);label(r.x+3,r.y+2,0,MP_TEXT("Прыжок","Jump"),PAPER,r.x+r.w);
     }
-    label(168,177,0,"Обзор стилусом",MUTED,318);
+    label(168,177,0,MP_TEXT("Обзор стилусом","Stylus Look"),MUTED,318);
     flush();
 }
 void ui_race_finish(unsigned seconds,unsigned best) {
-    char result[72];heading("Минута Нью-Йорка");
-    snprintf(result,sizeof result,"Ваше время   %u:%02u:%02u",seconds/3600,seconds/60%60,seconds%60);
+    char result[72];heading(MP_TEXT("Минута Нью-Йорка","New York Minute"));
+    snprintf(result,sizeof result,MP_TEXT("Ваше время   %u:%02u:%02u","Your Time   %u:%02u:%02u"),seconds/3600,seconds/60%60,seconds%60);
     label(12,75,1,result,PAPER,312);
-    if(best){snprintf(result,sizeof result,"Рекорд   %u:%02u:%02u",best/3600,best/60%60,best%60);
+    if(best){snprintf(result,sizeof result,MP_TEXT("Рекорд   %u:%02u:%02u","Record   %u:%02u:%02u"),best/3600,best/60%60,best%60);
         label(12,112,1,result,ACCENT,312);}
-    tile(8,162,304,40,"Дальше",true,true,-1);flush();
+    tile(8,162,304,40,MP_TEXT("Дальше","Next"),true,true,-1);flush();
     while(aptMainLoop()){bank_tick();hidScanInput();if(hidKeysDown()&(KEY_A|KEY_B|KEY_TOUCH))break;gspWaitForVBlank();}
 }
 void ui_run_status(int seconds,int saves) {
     if(seconds<0 && saves<0)return;
     char text[48];
     if(seconds>=0)snprintf(text,sizeof text,"%d:%02d",seconds/60,seconds%60);
-    else snprintf(text,sizeof text,"Сохр. %d",saves);
+    else snprintf(text,sizeof text,MP_TEXT("Сохр. %d","Saves %d"),saves);
     box(226,65,90,22,PANEL);label(232,66,0,text,seconds>=0 && seconds<=10?ACCENT:PAPER,315);flush();
 }
 void ui_journal_link(void) {
     TouchRect r=touch_rects[TOUCH_JOURNAL];
-    box(r.x,r.y,r.w,r.h,PANEL);label(r.x+3,r.y+2,0,"Дневник",PAPER,r.x+r.w);flush();
+    box(r.x,r.y,r.w,r.h,PANEL);label(r.x+3,r.y+2,0,MP_TEXT("Дневник","Journal"),PAPER,r.x+r.w);flush();
 }
 void ui_journal(const char *objective,const char items[3][96],const char *caption) {
-    heading("Дневник Макса");
-    label(10,56,0,"ЗАДАЧА",ACCENT,310);
-    int y=paragraph(10,74,0,*objective?objective:"Задача не указана",4,PAPER);
+    heading(MP_TEXT("Дневник Макса","Max's Journal"));
+    label(10,56,0,MP_TEXT("ЗАДАЧА","OBJECTIVE"),ACCENT,310);
+    int y=paragraph(10,74,0,*objective?objective:MP_TEXT("Задача не указана","No objective"),4,PAPER);
     if(*caption && strcmp(caption,objective))y=paragraph(10,y+2,0,caption,2,MUTED);
     bool inventory=false;
     for(unsigned i=0;i<3;i++)if(items[i][0]){
-        if(!inventory){y+=4;box(8,y,304,1,LINE);label(10,y+2,0,"ПРЕДМЕТЫ",ACCENT,310);y+=20;inventory=true;}
+        if(!inventory){y+=4;box(8,y,304,1,LINE);label(10,y+2,0,MP_TEXT("ПРЕДМЕТЫ","ITEMS"),ACCENT,310);y+=20;inventory=true;}
         if(y<=196)y=paragraph(10,y,0,items[i],1,PAPER);
     }
-    footer("A  /  B   Назад");flush();
+    footer(MP_TEXT("A  /  B   Назад","A  /  B   Back"));flush();
     while(aptMainLoop()){
         hidScanInput();if(hidKeysDown()&(KEY_A|KEY_B|KEY_START|KEY_TOUCH))break;
         gspWaitForVBlank();
@@ -659,25 +660,25 @@ void ui_caption(const char *area,const char *caption) {
 }
 void ui_comic(bool last,bool single,ComicView view,const char *caption,unsigned panel,unsigned panels) {
     static const char *const controls[]={
-        [COMIC_PAGE]="A   Дальше     /     B   Закрыть",
-        [COMIC_ORIGINAL]="X   Крупный текст   /   A   Дальше",
-        [COMIC_READABLE]="X   Оригинал   /   A   Дальше",
-        [COMIC_ZOOM_AVAILABLE]="X   Увеличить   /   A   Дальше",
-        [COMIC_ZOOM]="X   Вся страница   /   Крестовина"
+        [COMIC_PAGE]=MP_TEXT("A   Дальше     /     B   Закрыть","A   Next     /     B   Close"),
+        [COMIC_ORIGINAL]=MP_TEXT("X   Крупный текст   /   A   Дальше","X   Large Text   /   A   Next"),
+        [COMIC_READABLE]=MP_TEXT("X   Оригинал   /   A   Дальше","X   Original   /   A   Next"),
+        [COMIC_ZOOM_AVAILABLE]=MP_TEXT("X   Увеличить   /   A   Дальше","X   Zoom   /   A   Next"),
+        [COMIC_ZOOM]=MP_TEXT("X   Вся страница   /   Крестовина","X   Full Page   /   D-Pad")
     };
-    heading("Графический роман");
+    heading(MP_TEXT("Графический роман","Graphic Novel"));
     if(*caption)label(17,53,0,caption,PAPER,view==COMIC_READABLE && panels>1?210:308);
     bool more=view==COMIC_READABLE && panel+1<panels;
     if(view==COMIC_READABLE && panels>1){
         char counter[40];
-        snprintf(counter,sizeof counter,"Текст  %u / %u",panel+1,panels);
+        snprintf(counter,sizeof counter,MP_TEXT("Текст  %u / %u","Text  %u / %u"),panel+1,panels);
         label(215,53,0,counter,MUTED,310);
     }
-    tile(8,77,304,56,more?"Дальше по тексту":last?"Дальше":"Следующая страница",true,true,-1);
-    tile(8,144,304,54,single?"Закрыть":"Пропустить вступление",true,false,-1);
+    tile(8,77,304,56,more?MP_TEXT("Дальше по тексту","Continue Reading"):last?MP_TEXT("Дальше","Next"):MP_TEXT("Следующая страница","Next Page"),true,true,-1);
+    tile(8,144,304,54,single?MP_TEXT("Закрыть","Close"):MP_TEXT("Пропустить вступление","Skip Intro"),true,false,-1);
     const char *hint=controls[view];
-    if(view==COMIC_READABLE && panels>1)hint="X   Вся страница   /   Крестовина";
-    if(view==COMIC_ZOOM && panels)hint="X   Крупный текст   /   Крестовина";
+    if(view==COMIC_READABLE && panels>1)hint=MP_TEXT("X   Вся страница   /   Крестовина","X   Full Page   /   D-Pad");
+    if(view==COMIC_ZOOM && panels)hint=MP_TEXT("X   Крупный текст   /   Крестовина","X   Large Text   /   D-Pad");
     footer(hint);flush();
 }
 static int loading_percent=-1;
@@ -685,7 +686,7 @@ void ui_loading_progress(unsigned percent){
     if(percent>100)percent=100;
     if((int)percent==loading_percent)return;
     if(loading_percent<0 || percent<(unsigned)loading_percent){
-        heading("Загрузка");box(20,210,280,12,LINE);
+        heading(MP_TEXT("Загрузка","Loading"));box(20,210,280,12,LINE);
     }
     loading_percent=percent;
     box(22,212,276,8,PANEL);box(22,212,276*percent/100,8,ACCENT);
@@ -706,6 +707,6 @@ void ui_level_loading(const char *stage) {
 }
 void ui_status(const char *text){heading(text);flush();}
 void ui_notice(const char *text) {
-    heading("Сообщение");label(12,88,1,text,PAPER,317);tile(8,159,304,42,"Назад",true,true,-1);flush();
+    heading(MP_TEXT("Сообщение","Notice"));label(12,88,1,text,PAPER,317);tile(8,159,304,42,MP_TEXT("Назад","Back"),true,true,-1);flush();
     while(aptMainLoop()){hidScanInput();if(hidKeysDown()&(KEY_A|KEY_B|KEY_TOUCH|KEY_START)) break;gspWaitForVBlank();}
 }

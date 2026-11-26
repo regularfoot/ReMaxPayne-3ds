@@ -8,9 +8,10 @@ import struct
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 from pack_native import member
+from xbox_disc import archive_root, language
 
 
-def lower_ui(archives, output):
+def lower_ui(archives, output, locale='ru'):
     def picture(path):
         return Image.open(BytesIO(member(archives/'x_english.ras', 'data/'+path+'.dds'))).convert('RGBA')
 
@@ -65,9 +66,10 @@ def lower_ui(archives, output):
     from native_texture import texture
     pause=Image.new('RGBA',(128,32))
     font=ImageFont.truetype(font_path,24)
-    draw=ImageDraw.Draw(pause);bounds=draw.textbbox((0,0),'ПАУЗА',font=font)
+    word='PAUSE' if locale=='en' else 'ПАУЗА'
+    draw=ImageDraw.Draw(pause);bounds=draw.textbbox((0,0),word,font=font)
     draw.text(((128-bounds[2]+bounds[0])//2-bounds[0],(32-bounds[3]+bounds[1])//2-bounds[1]),
-              'ПАУЗА',font=font,fill=(255,255,255,255))
+              word,font=font,fill=(255,255,255,255))
     (output/'pause.tex').write_bytes(texture(pause))
     # UV rectangles come from the Xbox HUD definition, not localized name cards.
     hud=member(archives/'x_english.ras','data/hud/hud.txt').decode('latin1')
@@ -104,4 +106,4 @@ if __name__ == '__main__':
     parser.add_argument('disc',type=Path)
     parser.add_argument('output',type=Path)
     args=parser.parse_args()
-    lower_ui(args.disc/'english',args.output)
+    lower_ui(archive_root(args.disc),args.output,language(args.disc))

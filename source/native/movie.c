@@ -1,3 +1,4 @@
+#include "language.h"
 #include "movie.h"
 #include "campaign_file.h"
 #include "ui.h"
@@ -56,7 +57,7 @@ bool movie_play(const char *name) {
         ndspChnReset(CHANNEL);ndspChnSetFormat(CHANNEL,NDSP_FORMAT_MONO_PCM16);ndspChnSetRate(CHANNEL,22050);
         float gain=ui_settings.volume/4.f,mix[12]={gain,gain};ndspChnSetMix(CHANNEL,mix);
     }
-    if(ok) {gfxSetScreenFormat(GFX_TOP,GSP_RGB565_OES);gfxSet3D(false);ui_status("Видео   /   A пропустить");}
+    if(ok) {gfxSetScreenFormat(GFX_TOP,GSP_RGB565_OES);gfxSet3D(false);ui_status(MP_TEXT("Видео   /   A пропустить","Video   /   A Skip"));}
     u64 start=svcGetSystemTick();
     for(unsigned i=0;ok && i<header.frames && aptMainLoop();i++) {
         uint32_t n;

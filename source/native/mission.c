@@ -1,3 +1,4 @@
+#include "language.h"
 #include "mission.h"
 #include "phone.h"
 #include <math.h>
@@ -44,45 +45,45 @@ const char *mission_prompt(const Mission *m,const Player *p) {
     const RoomHeader *h=room_header();
     if (m->room>=HOME) {
         unsigned page=house_page(m,p);
-        if (page==6) return "A   Осмотреть знак на стене";
-        if (page==7) return "A   Ответить на звонок";
-        if (m->room==HOME) return m->house.sign?"Пройдите через прихожую.":"Осмотрите знак на стене.";
-        if (m->room==HOME_PHONE) return m->house.call?"Найдите лестницу за гостиной.":"Найдите звонящий телефон.";
-        if (m->room==HOME_LIVING) return "Поднимитесь по лестнице.";
-        return m->house.landing?"Конец фрагмента. START   Меню":"Найдите верхнюю площадку.";
+        if (page==6) return MP_TEXT("A   Осмотреть знак на стене","A   Inspect the sign");
+        if (page==7) return MP_TEXT("A   Ответить на звонок","A   Answer the phone");
+        if (m->room==HOME) return m->house.sign?MP_TEXT("Пройдите через прихожую.","Go through the hallway."):MP_TEXT("Осмотрите знак на стене.","Look at the sign on the wall.");
+        if (m->room==HOME_PHONE) return m->house.call?MP_TEXT("Найдите лестницу за гостиной.","Find the stairs past the living room."):MP_TEXT("Найдите звонящий телефон.","Find the ringing phone.");
+        if (m->room==HOME_LIVING) return MP_TEXT("Поднимитесь по лестнице.","Go upstairs.");
+        return m->house.landing?MP_TEXT("Конец фрагмента. START   Меню","End of demo. START   Menu"):MP_TEXT("Найдите верхнюю площадку.","Find the upstairs landing.");
     }
-    if (!m->health) return "Макс погиб. A   Повторить";
+    if (!m->health) return MP_TEXT("Макс погиб. A   Повторить","Max is dead. A   Retry");
     if (m->rifle && m->defeated==mission_gunmen(m)) {
         if (m->room==STREET && room_near(p,h->use,1.9f))
-            return m->practice_round?"A   Начать новый раунд":"A   Начать тренировку";
-        return m->practice_round?"Раунд окончен. Вернитесь к выключателю.":"Обучение пройдено. Найдите выключатель.";
+            return m->practice_round?MP_TEXT("A   Начать новый раунд","A   Start next round"):MP_TEXT("A   Начать тренировку","A   Start training");
+        return m->practice_round?MP_TEXT("Раунд окончен. Вернитесь к выключателю.","Round over. Return to the switch."):MP_TEXT("Обучение пройдено. Найдите выключатель.","Tutorial complete. Find the switch.");
     }
     if (m->practice_round) {
         RoomId next=mission_next_area(m);
-        if (next==m->room) return "Устраните противников в этой зоне.";
-        if (next==SIDE_ALLEY) return "Проверьте боковой переулок.";
-        if (next==DEAD_END) return "Проверьте тупик.";
-        if (next==SUBWAY) return "Проверьте вход в метро.";
-        return "Вернитесь на улицу.";
+        if (next==m->room) return MP_TEXT("Устраните противников в этой зоне.","Clear out the enemies here.");
+        if (next==SIDE_ALLEY) return MP_TEXT("Проверьте боковой переулок.","Check the side alley.");
+        if (next==DEAD_END) return MP_TEXT("Проверьте тупик.","Check the dead end.");
+        if (next==SUBWAY) return MP_TEXT("Проверьте вход в метро.","Check the subway entrance.");
+        return MP_TEXT("Вернитесь на улицу.","Go back to the street.");
     }
-    if (m->room==SIDE_ALLEY || m->room==DEAD_END) return "Вернитесь на улицу.";
+    if (m->room==SIDE_ALLEY || m->room==DEAD_END) return MP_TEXT("Вернитесь на улицу.","Go back to the street.");
     if (m->room==START_ROOM) {
-        if (!p->answered) return room_near(p,h->phone,1.5f)?"A   Ответить на звонок":"Найдите звонящий телефон.";
-        if (!m->van) return room_near(p,h->use,2.25f)?"A   Открыть фургон":"Откройте задние двери фургона.";
-        if (!m->gate) return "Сбейте выстрелом замок на воротах.";
-        return "Пройдите за ворота и сверните в переулок.";
+        if (!p->answered) return room_near(p,h->phone,1.5f)?MP_TEXT("A   Ответить на звонок","A   Answer the phone"):MP_TEXT("Найдите звонящий телефон.","Find the ringing phone.");
+        if (!m->van) return room_near(p,h->use,2.25f)?MP_TEXT("A   Открыть фургон","A   Open the van"):MP_TEXT("Откройте задние двери фургона.","Open the van's rear doors.");
+        if (!m->gate) return MP_TEXT("Сбейте выстрелом замок на воротах.","Shoot the padlock off the gate.");
+        return MP_TEXT("Пройдите за ворота и сверните в переулок.","Go through the gate and turn into the alley.");
     }
-    if (m->room==ALLEY) return "L   Перепрыгните ящики и выйдите на улицу.";
+    if (m->room==ALLEY) return MP_TEXT("L   Перепрыгните ящики и выйдите на улицу.","L   Jump over the crates to the street.");
     if (m->room==SUBWAY) {
-        if (m->cabinet) return "Поднимитесь к фургону на улице.";
-        return room_near(p,h->use,1.65f)?"A   Открыть аптечку":"Найдите аптечку.";
+        if (m->cabinet) return MP_TEXT("Поднимитесь к фургону на улице.","Go upstairs to the van on the street.");
+        return room_near(p,h->use,1.65f)?MP_TEXT("A   Открыть аптечку","A   Open the medicine cabinet"):MP_TEXT("Найдите аптечку.","Find the medicine cabinet.");
     }
-    if (!m->street_phone) return room_near(p,h->phone,1.65f)?"A   Ответить на звонок":"Найдите телефон у выключателя.";
-    if (!m->engaged) return room_near(p,h->use,1.9f)?"A   Начать перестрелку":"Нажмите выключатель рядом с телефоном.";
-    if (m->rifle) return "Устраните троих противников из переулка.";
-    if (m->cabinet) return room_near(p,h->rifle_van,2.25f)?"A   Взять винтовку из фургона":"Найдите фургон у входа в метро.";
-    if (m->defeated==STREET_GUNMEN) return "Спуститесь в метро и найдите аптечку.";
-    return "Устраните двоих противников.";
+    if (!m->street_phone) return room_near(p,h->phone,1.65f)?MP_TEXT("A   Ответить на звонок","A   Answer the phone"):MP_TEXT("Найдите телефон у выключателя.","Find the phone next to the switch.");
+    if (!m->engaged) return room_near(p,h->use,1.9f)?MP_TEXT("A   Начать перестрелку","A   Start the firefight"):MP_TEXT("Нажмите выключатель рядом с телефоном.","Press the switch next to the phone.");
+    if (m->rifle) return MP_TEXT("Устраните троих противников из переулка.","Take out the three enemies in the alley.");
+    if (m->cabinet) return room_near(p,h->rifle_van,2.25f)?MP_TEXT("A   Взять винтовку из фургона","A   Take the rifle from the van"):MP_TEXT("Найдите фургон у входа в метро.","Find the van by the subway entrance.");
+    if (m->defeated==STREET_GUNMEN) return MP_TEXT("Спуститесь в метро и найдите аптечку.","Go down to the subway and find the medicine cabinet.");
+    return MP_TEXT("Устраните двоих противников.","Take out the two enemies.");
 }
 
 static unsigned magazine(const Enemy *e){return e->animation.weapon==SHOTGUN?7:18;}

@@ -13,11 +13,12 @@ from pack_player import worlds
 from xbox_animation import sample_raw,normalization,track_scale
 from skin_poses import definitions,slots
 from pack_animation_timing import pack as pack_timing
+from xbox_disc import archive_root
 
 
 def pack(disc,out):
     base='data/database/'
-    with TemporaryDirectory() as work,(disc/'english/x_data.ras').open('rb') as archive,mmap.mmap(archive.fileno(),0,access=mmap.ACCESS_READ) as blob:
+    with TemporaryDirectory() as work,(archive_root(disc)/'x_data.ras').open('rb') as archive,mmap.mmap(archive.fileno(),0,access=mmap.ACCESS_READ) as blob:
         entries={e.path.lower():e for e in ras.read_directory(blob).entries}
         def read(name):return ras.member_bytes(blob,entries[base+name])
         def skeleton(name):

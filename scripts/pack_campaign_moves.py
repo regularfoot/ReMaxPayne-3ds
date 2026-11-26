@@ -9,6 +9,7 @@ from dade.maxpayne import ras
 from max_payne_sdk.max_kf2 import MaxKF2Reader
 from pack_player import worlds
 from animation_rules import encode as encode_body_sets
+from xbox_disc import archive_root
 
 CLIPS=('Crouch','ShootDodgeForward','ShootDodgeBackward','ShootDodgeLeft',
        'ShootDodgeRight','ShootBaseballBat','ShootGrenade')
@@ -24,7 +25,7 @@ def hierarchy(tracks):
 def pack(disc,dest):
     path='data/database/skeletons/default_skeleton/anim/'
     temp=dest.with_suffix('.partial')
-    with TemporaryDirectory() as work,(disc/'english/x_data.ras').open('rb') as f,mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as data:
+    with TemporaryDirectory() as work,(archive_root(disc)/'x_data.ras').open('rb') as f,mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as data:
         entries={e.path.lower():e for e in ras.read_directory(data).entries}
         def channels(name):
             file=Path(work)/'source.kf2'

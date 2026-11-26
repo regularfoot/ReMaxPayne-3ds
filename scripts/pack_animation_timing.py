@@ -2,14 +2,18 @@
 import argparse,hashlib,json,re,struct
 from pathlib import Path
 from pack_native import member
+from xbox_disc import archive_root, revision
 ROOT=Path(__file__).resolve().parents[1]
-XBE_SHA='212c47d25f96b68996d085abf93cb43464b8cf34f156081b4919866a2be74102'
+ACTION_HEADER_SHA='1bd37311d4f9bf897d1c2942ca59f467f1c5234891154f5402480cb0883181ce'
 def encode(disc,folder):
-    if hashlib.sha256((disc/'default.xbe').read_bytes()).hexdigest()!=XBE_SHA:raise ValueError('Transition oracle belongs to a different Xbox executable')
+    revision(disc)
     oracle=(ROOT/'tests/fixtures/xbox_transition_rules.bin').read_bytes()
     tag,rules,copy,phase=struct.unpack_from('<4sIII',oracle)
     if (tag,rules,copy,phase)!=(b'XTR1',447,32,144) or len(oracle)!=16+24*rules+4*(copy+phase):raise ValueError('Invalid retail transition oracle')
-    text=member(disc/'english/x_headers.ras','data/database/characteranimid.h').decode('latin1')
+    header=member(archive_root(disc)/'x_headers.ras','data/database/characteranimid.h')
+    if hashlib.sha256(header).hexdigest()!=ACTION_HEADER_SHA:
+        raise ValueError('The disc action IDs do not match the Xbox transition table')
+    text=header.decode('latin1')
     ids={k.lower().removeprefix('charanim_'):int(v,0) for k,v in re.findall(r'#define\s+(CHARANIM_\w+)\s+(0x[0-9a-fA-F]+|[0-9]+)',text)}
     index=(folder/'poses.idx').read_bytes();actions=struct.unpack_from('<I',index,8)[0];mapping=[]
     for i in range(actions):

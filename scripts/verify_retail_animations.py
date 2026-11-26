@@ -15,6 +15,7 @@ from pack_campaign_moves import CLIPS
 from skin_poses import definitions
 from animation_rules import encode as encode_body_sets
 from pack_animation_timing import encode as encode_timing
+from xbox_disc import archive_root
 
 
 def verify(disc,folder):
@@ -33,7 +34,7 @@ def verify(disc,folder):
         raise ValueError('Invalid source animation index')
     if meta[:8]!=struct.pack('<4sI',b'MPM1',count) or len(meta)!=8+12*count:raise ValueError('Invalid source loop metadata')
     names=[idx[16+64*actions+64*i:16+64*actions+64*(i+1)].split(b'\0')[0].decode() for i in range(count)]
-    with TemporaryDirectory() as scratch,(disc/'english/x_data.ras').open('rb') as f,mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as archive:
+    with TemporaryDirectory() as scratch,(archive_root(disc)/'x_data.ras').open('rb') as f,mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as archive:
         entries={e.path.lower():e for e in ras.read_directory(archive).entries}
         base='data/database/skeletons/default_skeleton/anim/'
         source_names={Path(p).stem for p in entries if p.startswith(base) and p.endswith('.kf2')}

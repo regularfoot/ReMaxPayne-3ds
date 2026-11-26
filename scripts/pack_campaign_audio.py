@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 from dade.maxpayne import ras
 from pack_native import member
 from campaign_refs import references
+from xbox_disc import archive_root
 
 
 def sections(script):
@@ -20,7 +21,7 @@ def sections(script):
 
 
 def pack(disc,source,out):
-    arcs=disc/'english';root=arcs/'data/database/sounds';music=disc/'data/database/music'
+    arcs=archive_root(disc);root=arcs/'data/database/sounds';music=disc/'data/database/music'
     waves={p.relative_to(root).as_posix().casefold():p for p in root.rglob('*') if p.suffix.lower()=='.wav'}
     tracks={p.relative_to(music).as_posix().casefold():p for p in music.rglob('*') if p.suffix.lower()=='.wav'}
     keys={key for kind,key in references(out.parent) if kind=='audio'}

@@ -6,6 +6,7 @@ import numpy as np
 from max_payne_sdk.max_kf2 import MaxKF2Reader
 from pack_native import member
 from pack_player import worlds
+from xbox_disc import archive_root
 
 
 def catalog(disc):
@@ -23,7 +24,7 @@ def catalog(disc):
 
 
 def pack(disc,source,out):
-    conf=dict(catalog(disc/'english'))
+    conf=dict(catalog(archive_root(disc)))
     tracks={}
     for src in source.glob('*.json.gz'):
         with gzip.open(src,'rt') as f:
@@ -35,7 +36,7 @@ def pack(disc,source,out):
         extra={'gunshot_big':False,'gunshot_small':False,'player_death_01':True}
         for name,parented in original+[(k,v) for k,v in extra.items() if k not in tracks]:
             filename,_=conf[name]
-            path=Path(scratch)/'camera.kf2';path.write_bytes(member(disc/'english/x_data.ras','data/database/camerapaths/'+filename))
+            path=Path(scratch)/'camera.kf2';path.write_bytes(member(archive_root(disc)/'x_data.ras','data/database/camerapaths/'+filename))
             data=MaxKF2Reader().parse(path)
             channels={a.animation.object_name.lower():a for a in data.keyframe_animations}
             cam=next(k for k in channels if k.startswith('camera'))

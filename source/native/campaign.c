@@ -1,3 +1,4 @@
+#include "language.h"
 #include "animation_state.h"
 #include "dodge_animation.h"
 #include "weapon_timing.h"
@@ -34,13 +35,13 @@ typedef enum { PISTOL,DUAL_PISTOL,EAGLE,PUMP,SAWED,JACKHAMMER,INGRAM,DUAL_INGRAM
                SNIPER,BAT,PIPE,GRENADE,MOLOTOV,M79,GUNS } GunId;
 typedef struct {const char *id,*title;unsigned capacity,pocket,damage,pellets;float delay;Weapon pose;bool automatic;} Gun;
 static const Gun guns[]={
-    {"beretta","Беретта",18,162,5,1,.25f,BERETTA,false},{"berettadual","Две Беретты",36,162,5,2,.25f,BERETTA,false},
-    {"deserteagle","Desert Eagle",12,48,10,1,1.f/3,BERETTA,false},{"pumpshotgun","Дробовик",7,80,5,5,1.f,SHOTGUN,false},
-    {"sawedshotgun","Обрез",2,80,5,5,.5f,SHOTGUN,false},{"jackhammer","Jackhammer",12,168,5,5,1.f/3,SHOTGUN,true},
-    {"ingram","Ingram",50,300,5,1,.125f,BERETTA,true},{"ingramdual","Два Ingram",100,300,5,2,.125f,BERETTA,true},
-    {"mp5","Colt Commando",30,150,10,1,1.f/6,RIFLE,true},{"sniper","Снайперская винтовка",5,20,70,1,1.f,RIFLE,false},
-    {"baseballbat","Бита",0,0,15,1,.52f,BERETTA,false},{"leadpipe","Труба",0,0,10,1,.52f,BERETTA,false},
-    {"grenade","Граната",1,10,50,1,1.f,BERETTA,false},{"molotov","Коктейль Молотова",1,10,20,1,1.f,BERETTA,false},
+    {"beretta",MP_TEXT("Беретта","Beretta"),18,162,5,1,.25f,BERETTA,false},{"berettadual",MP_TEXT("Две Беретты","Dual Berettas"),36,162,5,2,.25f,BERETTA,false},
+    {"deserteagle","Desert Eagle",12,48,10,1,1.f/3,BERETTA,false},{"pumpshotgun",MP_TEXT("Дробовик","Pump Shotgun"),7,80,5,5,1.f,SHOTGUN,false},
+    {"sawedshotgun",MP_TEXT("Обрез","Sawed-Off"),2,80,5,5,.5f,SHOTGUN,false},{"jackhammer","Jackhammer",12,168,5,5,1.f/3,SHOTGUN,true},
+    {"ingram","Ingram",50,300,5,1,.125f,BERETTA,true},{"ingramdual",MP_TEXT("Два Ingram","Dual Ingrams"),100,300,5,2,.125f,BERETTA,true},
+    {"mp5","Colt Commando",30,150,10,1,1.f/6,RIFLE,true},{"sniper",MP_TEXT("Снайперская винтовка","Sniper Rifle"),5,20,70,1,1.f,RIFLE,false},
+    {"baseballbat",MP_TEXT("Бита","Baseball Bat"),0,0,15,1,.52f,BERETTA,false},{"leadpipe",MP_TEXT("Труба","Lead Pipe"),0,0,10,1,.52f,BERETTA,false},
+    {"grenade",MP_TEXT("Граната","Grenade"),1,10,50,1,1.f,BERETTA,false},{"molotov",MP_TEXT("Коктейль Молотова","Molotov Cocktail"),1,10,20,1,1.f,BERETTA,false},
     {"m79","M79",1,10,70,1,1.f,RIFLE,false}
 };
 typedef struct {bool owned;unsigned rounds,reserve;} Stock;
@@ -222,7 +223,7 @@ static void action(unsigned id,const char *op,const char *const *args,unsigned c
     }
     if(!strcmp(op,"gm_enablegamelevel") && count==2 && !strcmp(args[0],mode_ids[game_run.mode])){
         for(unsigned i=1;i<GAME_MODES;i++)if(!strcmp(args[1],mode_ids[i]) && !save_unlock_mode(i))
-            ui_notice("Не удалось записать открытый режим");
+            ui_notice(MP_TEXT("Не удалось записать открытый режим","Could not save the unlocked mode"));
     }
     if(!strcmp(op,"ps_starteffect") || !strcmp(op,"ps_stopallemissions"))particles_event(id,op,args[0]);
     if(!strcmp(op,"mphm_changehudvisibility") || !strcmp(op,"mphm_enablehud"))hud_dirty=true;
@@ -1449,7 +1450,7 @@ static void hud(bool reloading) {
     Stock s=gun<0?(Stock){0}:inventory.stock[gun];
     char task[483];objective_text(task);
     ui_begin_update();
-    ui_hud(chapter,director.state[0].dead?"A   Продолжить":caption?journal_state.caption:task,gun>=0?guns[gun].title:NULL,
+    ui_hud(chapter,director.state[0].dead?MP_TEXT("A   Продолжить","A   Continue"):caption?journal_state.caption:task,gun>=0?guns[gun].title:NULL,
            (unsigned)fmaxf(0,ceilf(director.state[0].hp*100/maximum_health())),inventory.pills,gun<0?-1:(int)guns[gun].pose,
            s.rounds,gun<0?0:ammo_pool(gun)->reserve,reloading,gun==SNIPER?inventory.zoom:0,gun>=0,0,0,caption && journal_state.always);
     ui_journal_link();ui_combat_hud(inventory.bullet_time,inventory.slow,player_crouched,director.player_slow);
@@ -1817,12 +1818,12 @@ static bool run_map(const char *stage,UiChoice *next,char following[64],const Sa
             if(director.next_level) snprintf(following,64,"%s",director_text(director.next_level));
             if(director.finished) {
                 following[0]=0;
-                if(!strcmp(stage,"p3_l7-3") && game_run.mode==DEAD_ON_ARRIVAL && !save_completion())ui_notice("Не удалось записать прохождение на SD");
+                if(!strcmp(stage,"p3_l7-3") && game_run.mode==DEAD_ON_ARRIVAL && !save_completion())ui_notice(MP_TEXT("Не удалось записать прохождение на SD","Could not save progress to SD"));
                 if(C3D_FrameBegin(0)) C3D_FrameEnd(0);
                 bank_clear();movie_play("credits.mpv");
                 if(!strcmp(stage,"p3_l7-3") && game_run.mode==NEW_YORK_MINUTE){
                     unsigned best,seconds=(unsigned)ceilf(game_run.elapsed);
-                    if(!save_race_time(seconds,&best))ui_notice("Не удалось записать рекорд");
+                    if(!save_race_time(seconds,&best))ui_notice(MP_TEXT("Не удалось записать рекорд","Could not save the record"));
                     ui_race_finish(seconds,best);
                 }
                 if(!strcmp(stage,"p3_l7-3") && game_run.mode==DEAD_ON_ARRIVAL)snprintf(following,64,"end_combat");
@@ -1873,7 +1874,7 @@ static bool run_map(const char *stage,UiChoice *next,char following[64],const Sa
                 if(game_save_limit())game_run.saves++;
                 if(!store_state(ui_save_slot,stage,&p,&jump,&anim,cooldown)){
                     if(game_save_limit())game_run.saves--;
-                    ui_notice("Ошибка сохранения");
+                    ui_notice(MP_TEXT("Ошибка сохранения","Save failed"));
                 }
                 choice=UI_RESUME;
             }
