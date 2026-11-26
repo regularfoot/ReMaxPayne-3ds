@@ -11,6 +11,30 @@ from pack_native import write_screen
 from xbox_disc import archive_root, language
 
 
+CONTROL_LABELS = {
+    'BULLETTIME': 'the Bullet Time meter',
+    'CROUCH': '(tap Crouch)',
+    'JUMP': 'B',
+    'NEXTWEAPONCATEGORY': 'Y',
+    'NEXTWEAPONTYPE': 'Y',
+    'PAINKILLER': 'SELECT',
+    'PAUSE': 'START',
+    'RELOAD': 'X',
+    'SHOOT': 'R',
+    'USE': 'A',
+}
+SHOOT_DODGE_HINTS = {'tip_15', 'tip_shootdodge', 'string_subway_tip_shootdodge'}
+
+
+def format_controls(key, text):
+    def label(match):
+        action = match[1]
+        if action == 'BULLETTIME' and key in SHOOT_DODGE_HINTS:
+            return 'L'
+        return CONTROL_LABELS.get(action, match[0])
+    return re.sub(r'#([A-Z_]+)#', label, text)
+
+
 def stage_info(source,out,english):
     parts=('I','II','III')
     rows=[]
@@ -80,11 +104,9 @@ def pack(disc,source,out):
     with (archives/'x_english.ras').open('rb') as f,mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as data:
         entry=next(e for e in ras.read_directory(data).entries if e.path.lower()=='data/database/stringtable.txt')
         strings=ras.member_bytes(data,entry).decode('cp1251')
-    local={}
-    if not english:
-        local=dict(line.split("\t",1) for line in (Path(__file__).parent/"locale/objectives.ru.tsv").read_text().splitlines())
     for key,body in re.findall(r'^\[(\w+)\]\s*String\s*=\s*"([^"]*)"',strings,re.M|re.I):
-        (table/(key.lower()+'.txt')).write_text(local.get(key.lower(),body)+'\n',encoding='utf-8')
+        key = key.lower()
+        (table / (key + '.txt')).write_text(format_controls(key, body) + '\n', encoding='utf-8')
     from pack_campaign_text import pack as pack_text
     pack_text(out)
     print(f'{len(list(pages.glob("*.565")))} pages, {len(list(pages.glob("*.pcm")))} narrations')

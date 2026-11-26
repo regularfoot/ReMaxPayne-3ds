@@ -12,7 +12,7 @@ from PIL import Image, ImageChops
 from dade.maxpayne import ras
 from max_payne_sdk.max_type import parseType
 from native_texture import texture, _tile, RGBA4
-from rps_layers import parse_layers, selected_frames
+from rps_layers import layout_key, parse_layers, selected_frames, sprite_names
 from xbox_disc import archive_root
 
 CELL = 16
@@ -52,9 +52,8 @@ def integrated_rate(layer, t):
 
 
 def pack(disc, output):
-    # Named cells were located by matching the original materials to Xbox DDS pages.
-    # Addresses are (sheet, column, row, vertical flip); all shipped pixels come from the DVD.
-    coordinates=json.loads(Path(__file__).with_name('particle_cells.json').read_text())
+    # Port-authored atlas coordinates in the order of the RPS sprite references.
+    layouts = json.loads(Path(__file__).with_name('particle_atlas_layout.json').read_text())
     slots={};sprites=[];definitions=[];shape_curves=[];groups=[];layers=[];variants=[];lifetimes=[];drag=[]
     with (archive_root(disc)/'x_data.ras').open('rb') as file, mmap.mmap(file.fileno(),0,access=mmap.ACCESS_READ) as archive:
         entries = {e.path.lower():e for e in ras.read_directory(archive).entries}
@@ -72,13 +71,15 @@ def pack(disc, output):
             prefix=base+'combined_images/_'+path[:-4].replace('/','_')
             if path not in entries or prefix+'1.dds' not in entries:continue
             cap,period,components=parse_layers(read(path));sheets={}
+            names = sprite_names(components)
+            coordinates = dict(zip(names, layouts[layout_key(key, names)], strict=True))
             groups.append(struct.pack('<4Hf',len(layers),len(components),cap,0,period))
             for number,layer in enumerate(components):
                 first_variant=len(variants)
                 for sequence in layer.sequences:
                     frames=[]
                     for i,(image,mask,w,h) in enumerate(selected_frames(sequence)):
-                        page,x,y,flip=coordinates[key][image]
+                        page,x,y,flip=coordinates[image]
                         if page not in sheets:
                             sheets[page]=Image.open(io.BytesIO(read(prefix+str(page+1)+'.dds'))).convert('RGBA')
                         source=sheets[page]

@@ -18,3 +18,7 @@ assets/
 *.xiso
 *.dat
 *.partial
+*.mdf
+*.mds
+*.cia
+*.zip

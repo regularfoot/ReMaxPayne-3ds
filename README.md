@@ -2,9 +2,9 @@
 
 ![Max Payne fires two Berettas during a shoot-dodge on the upper screen of a Nintendo 3DS, with the port's touch-screen HUD below.](docs/remaxpayne-3ds-poster.png)
 
-**ReMaxPayne-3ds** is a fan-made native Max Payne port that works on both **Old 3DS and New 3DS** through the Homebrew Launcher. Version **0.1.0** is an early-access build for testing on real hardware.
+**ReMaxPayne-3ds** is a fan-made native Max Payne port that works on both **Old 3DS and New 3DS** through the Homebrew Launcher. Version **0.1.0** is an early-access source release for testing on real hardware.
 
-The repository contains the port source and conversion tools. Build the campaign from your own supported Xbox PAL or NTSC disc image.
+This project is intended for personal use with data from your own copy of Max Payne for Xbox. Build locally from your supported PAL or NTSC disc image. Keep the resulting game data and 3DSX for your own use.
 
 ## How it plays
 
@@ -37,9 +37,9 @@ Graphic-novel pages, lettering, and narration come from your Xbox copy. Press **
 
 ## Build and install
 
-Install devkitARM, libctru, Citro3D, FFmpeg, liblz4, and Python with Pillow and NumPy. Add the source directories of [dade](https://github.com/Tatsh/dade/tree/8fcd00aa194cfdbc1cee27fdf94c29502b012290) and [max_payne_sdk](https://github.com/m0nstr0/max_payne_ldb_importer/tree/708a64a3ff81c7ed645549ffcf3f451b91c5ba3d) to `PYTHONPATH`. Set `DEVKITPRO` to your SDK directory. On systems without a supported system font, set `MP_UI_FONT` to a TrueType font with Latin and Cyrillic glyphs.
+Install devkitARM, libctru, Citro3D, FFmpeg, liblz4, and Python 3.11 or newer with Pillow, NumPy, and Unicorn. Add the source directories of [dade](https://github.com/Tatsh/dade/tree/8fcd00aa194cfdbc1cee27fdf94c29502b012290) and [max_payne_sdk](https://github.com/m0nstr0/max_payne_ldb_importer/tree/708a64a3ff81c7ed645549ffcf3f451b91c5ba3d) to `PYTHONPATH`. Set `DEVKITPRO` to your SDK directory. On systems without a supported system font, set `MP_UI_FONT` to a TrueType font with Latin and Cyrillic glyphs.
 
-The same commands work with both supported revisions. The extractor preserves the disc's original layout. The conversion tools find the RAS archives either in the disc root or in its `english/` directory.
+The same commands work with both supported revisions. The extractor preserves the disc's original layout. The conversion tools find the RAS archives in the disc root or its `english/` directory. The animation packer reads the transition rules from the disc's `default.xbe` with Unicorn during asset preparation.
 
 | Disc revision | `default.xbe` SHA-256 |
 | --- | --- |
@@ -56,8 +56,14 @@ make test
 
 The extractor also accepts an MDF containing an XDVDFS image, using the same command. An already extracted disc can be placed in `game/` directly. Disc videos are included when the source contains the corresponding Bink files.
 
-Use a separate checkout for each disc to keep the generated files separate. To choose the interface and objective text language explicitly, export `MP_LANG=en` or `MP_LANG=ru` before packing the assets and running Make. The disc supplies the original narration and comic artwork.
+Use a separate checkout for each disc to keep the generated files separate. To choose the interface language explicitly, export `MP_LANG=en` or `MP_LANG=ru` before packing the assets and running Make. Objective text, narration, and comic pages use the data from your disc.
 
-The campaign build writes `dist/native-full/3ds/maxpayne/maxpayne.3dsx`. Copy it to `3ds/maxpayne/maxpayne.3dsx` on your SD card and run it through the Homebrew Launcher. The game writes saves and settings beside the executable. Set `GAME_DISC` if you extracted the game to a different directory, and `ASSET_PYTHON` if your converters use a separate Python environment. The full 3DSX embeds your prepared game data and is intended for local use.
+The campaign build writes `dist/native-full/3ds/maxpayne/maxpayne.3dsx`. Copy it to `3ds/maxpayne/maxpayne.3dsx` on your SD card and run it through the Homebrew Launcher. The game writes saves and settings beside the executable. Set `GAME_DISC` if you extracted the game to a different directory, and `ASSET_PYTHON` if your converters use a separate Python environment. The full 3DSX embeds your locally prepared game data.
+
+## Credits
+
+Thank you to Remedy Entertainment and the original Max Payne development team for creating the game.
+
+The first 3DS prototype started from phobos665's Xbox recompilation project. That work used DirectXbox-Recomp and helped get the project running. The current 3DS release uses a native engine. [payne-recomp](https://github.com/phobos665/payne-recomp) · [DirectXbox-Recomp](https://github.com/phobos665/DirectXbox-Recomp)
 
 Max Payne and Nintendo 3DS are trademarks of their respective owners. This project is independent of the original publishers.

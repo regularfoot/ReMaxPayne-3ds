@@ -226,6 +226,24 @@ def pack_lights(level, dest):
     partial.replace(dest)
 
 
+def verify_lights(disc, campaign):
+    archives = archive_root(disc)
+    stages = list(levels(archives))
+    with TemporaryDirectory() as scratch:
+        scratch = Path(scratch)
+        ldb = scratch / 'stage.ldb'
+        for stage in stages:
+            source = f"data/database/levels/{stage['directory']}/{stage['level']}"
+            ldb.write_bytes(member(level_archive(archives, stage), source))
+            output = scratch / stage['id']
+            pack_lights(MaxLDBReader(ldb).parse(), output.with_suffix('.lights'))
+            for extension in ('.lights', '.dlg'):
+                name = output.with_suffix(extension).name
+                if (scratch / name).read_bytes() != (campaign / name).read_bytes():
+                    raise ValueError(f'Light data differs from the supplied disc: {name}')
+    print(f'Point and cone lights verified against the supplied disc across {len(stages)} maps')
+
+
 def pack(disc,out,only,force=False,texture_limit=128):
     arcs=archive_root(disc)
     out.mkdir(parents=True,exist_ok=True)

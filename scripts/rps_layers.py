@@ -1,4 +1,5 @@
 """Read the sprite templates and their paired emitters from an Xbox RPS stream."""
+import hashlib
 import io
 from dataclasses import dataclass
 from max_payne_sdk.max_type import parseType
@@ -83,3 +84,16 @@ def parse_layers(raw):
 def selected_frames(sequence):
     # One complete named animation per sprite; a frame must never jump between variants.
     return [sequence[min(len(sequence)-1, int((i+.5)*len(sequence)/4))] for i in range(4)]
+
+
+def sprite_names(layers):
+    return list(dict.fromkeys(
+        name
+        for layer in layers
+        for sequence in layer.sequences
+        for name, _, _, _ in selected_frames(sequence)
+    ))
+
+
+def layout_key(path, names):
+    return hashlib.sha256('\0'.join([path, *names]).encode()).hexdigest()

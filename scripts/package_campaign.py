@@ -1,7 +1,5 @@
 """Embed campaign data in the 3DSX RomFS so console installation is a single file."""
 import argparse
-import hashlib
-import json
 import os
 from pathlib import Path
 import shutil
@@ -12,6 +10,7 @@ from verify_weapon_effects import verify as verify_weapon_effects
 from tempfile import TemporaryDirectory
 from campaign_refs import validate
 from campaign_romfs import verify_image
+from pack_campaign import verify_lights
 from pack_campaign_text import encode as encode_texts
 from pack_campaign_movies import MOVIES
 from xbox_disc import language, movie_source
@@ -56,12 +55,7 @@ def package(assets,campaign,elf,smdh,output,tool):
         raise ValueError('HUD text bank differs from source captions')
     for test in ('test_native_texture.py','test_triangulate.py'):
         subprocess.run([sys.executable,root_path()/'tests'/test],check=True)
-    light_oracle=json.loads((root_path()/"tests/fixtures/xbox_lights.json").read_text())["maps"]
-    for row in light_oracle:
-        for ext,key in (("lights","lights_sha256"),("dlg","cones_sha256")):
-            if hashlib.sha256((campaign/(row["stage"]+"."+ext)).read_bytes()).hexdigest()!=row[key]:
-                raise ValueError("Original light resources differ: "+row["stage"]+"."+ext)
-    print("All 2247 Xbox point lights and 185 cones across 69 maps verified")
+    verify_lights(disc, campaign)
     validate(campaign)
     root=Path(__file__).resolve().parents[1]
     with TemporaryDirectory() as scratch:

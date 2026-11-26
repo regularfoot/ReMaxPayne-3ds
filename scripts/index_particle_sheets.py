@@ -14,7 +14,7 @@ import numpy as np
 from PIL import Image
 from dade.maxpayne import ras
 from max_payne_sdk.max_type import parseType
-from rps_layers import parse_layers, selected_frames
+from rps_layers import layout_key, parse_layers, selected_frames
 from xbox_disc import archive_root
 
 BASE='data/database/particles/'
@@ -85,7 +85,7 @@ def build(disc,obb,output):
                         coordinates,pixels=grids[grid]
                         distance=((pixels-signature(ref,layer.additive))**2).mean(axis=(1,2,3))
                         frames[rgb]=coordinates[int(distance.argmin())]
-            result[path.removeprefix(BASE)]=frames
+            result[layout_key(path.removeprefix(BASE), list(frames))] = list(frames.values())
     rows=[json.dumps(k)+':'+json.dumps(v,sort_keys=True,separators=(',',':')) for k,v in sorted(result.items())]
     output.write_text('{\n'+',\n'.join(rows)+'\n}\n')
 
