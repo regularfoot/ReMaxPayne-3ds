@@ -200,8 +200,9 @@ static void set_caption(const char *key,float seconds,bool always) {
     copy_text_key(journal_state.caption,sizeof journal_state.caption,key);
     journal_state.seconds=seconds;journal_state.always=always;hud_dirty=true;
 }
+static bool death_camera(void);
 static void action(unsigned id,const char *op,const char *const *args,unsigned count) {
-    presentation_event(op,args,count);
+    presentation_event(op,args,count,death_camera());
     if(paths && id<director.count)campaign_nav_event(paths+id,op);
     if(visuals && id<director.count){
         ActorExtra *extra=visuals+id;
@@ -1729,6 +1730,8 @@ static bool restore_state(const SaveHeader *h,const Checkpoint *c,Player *p,Jump
     director.speed=c->speed;director.controls=c->controls;director.camera=c->camera;director.widescreen=c->widescreen;
     if(c->path.path!=DIRECTOR_NONE && (camera_path_duration(c->path.path)<=0 || c->path.owner>=director.count))return false;
     presentation=c->presentation;director.path=c->path;
+    // Older checkpoints may have been written while the kill camera hid the HUD.
+    if(death_camera())presentation.visibility=(Tween){.first=1,.last=1};
     director.objective=c->objective;restore_objectives(c);
     *p=c->player;*j=c->jump;*a=c->animation;inventory=c->inventory;*cooldown=c->cooldown;
     retail_restore_animation(a,p->crouched);

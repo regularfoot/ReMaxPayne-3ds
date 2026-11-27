@@ -42,7 +42,7 @@ uint32_t presentation_flash(void) {
         presentation.flash_out>0?fmaxf(0,1-(t-presentation.flash_hold)/presentation.flash_out):0;
     return (presentation.flash_color&0xffffff00u)|(uint32_t)lroundf((presentation.flash_color&255)*opacity);
 }
-void presentation_event(const char *op,const char *const *a,unsigned count) {
+void presentation_event(const char *op,const char *const *a,unsigned count,bool keep_hud) {
     if(!strcmp(op,"gm_changefov") && count>=2) {
         presentation.fov=tween(presentation_value(presentation.fov),fminf(3,fmaxf(.15f,strtof(a[0],NULL))),strtof(a[1],NULL));
     } else if(!strcmp(op,"gm_changefog") && count==4) {
@@ -57,9 +57,9 @@ void presentation_event(const char *op,const char *const *a,unsigned count) {
     } else if(!strcmp(op,"mphm_flashtocolor") && count==4) {
         presentation.flash_color=strtoul(a[0],NULL,0);presentation.flash_time=0;
         presentation.flash_in=fmaxf(0,strtof(a[1],NULL));presentation.flash_hold=fmaxf(0,strtof(a[2],NULL));presentation.flash_out=fmaxf(0,strtof(a[3],NULL));
-    } else if(!strcmp(op,"mphm_enablehud") && count) {
+    } else if(!keep_hud && !strcmp(op,"mphm_enablehud") && count) {
         float on=strcmp(a[0],"false") && strcmp(a[0],"0");presentation.visibility=tween(on,on,0);
-    } else if(!strcmp(op,"mphm_changehudvisibility") && count>=2) {
+    } else if(!keep_hud && !strcmp(op,"mphm_changehudvisibility") && count>=2) {
         presentation.visibility=tween(presentation_value(presentation.visibility),strtof(a[0],NULL)>0?1:0,strtof(a[1],NULL));
     }
 }

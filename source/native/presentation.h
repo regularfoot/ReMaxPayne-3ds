@@ -11,7 +11,7 @@ typedef struct {
 } Presentation;
 extern Presentation presentation;
 bool presentation_open(const char *stage,char chapter[64]);
-void presentation_event(const char *op,const char *const *args,unsigned count);
+void presentation_event(const char *op,const char *const *args,unsigned count,bool keep_hud);
 void presentation_tick(float dt);
 float presentation_value(Tween t);
 uint32_t presentation_fog(void);
