@@ -59,6 +59,42 @@ static uint16_t text_id(const char *name){
 }
 bool director_has_text(const char *name){return text_id(name)!=DIRECTOR_NONE;}
 
+static void remember_objective(uint16_t *candidate,uint16_t key){
+    if(!key || key==DIRECTOR_NONE)return;
+    if(*candidate==DIRECTOR_NONE)*candidate=key;
+    else if(*candidate!=key)*candidate=0;
+}
+
+void director_recover_objectives(unsigned last,unsigned visible,const char *keys[3]){
+    uint16_t print=text_id("mphm_printobjective");
+    if(!visible || print==DIRECTOR_NONE)return;
+    uint16_t matches[3]={DIRECTOR_NONE,DIRECTOR_NONE,DIRECTOR_NONE};
+    uint16_t stage[3]={DIRECTOR_NONE,DIRECTOR_NONE,DIRECTOR_NONE};
+    for(unsigned i=0;i<prog.h.events;i++){
+        const Event *event=prog.events+i;
+        uint16_t lines[3]={DIRECTOR_NONE,DIRECTOR_NONE,DIRECTOR_NONE};
+        for(unsigned j=event->first;j<event->first+event->count;j++){
+            const Message *m=prog.messages+j;
+            if(m->op!=print || !m->count)continue;
+            unsigned line=m->count>1?(unsigned)atoi(director_text(m->args[1])):0;
+            if(line>=3)continue;
+            lines[line]=m->args[0];
+            remember_objective(stage+line,lines[line]);
+            if(lines[line]!=last)continue;
+            // Older checkpoints remember the last objective command, including
+            // commands that clear a line. Match the preceding lines in its event.
+            bool fits=true;
+            for(unsigned k=0;k<3;k++)if(lines[k]!=DIRECTOR_NONE){
+                if((lines[k]!=0)!=((visible&(1u<<k))!=0) ||
+                   (keys[k] && strcmp(keys[k],director_text(lines[k]))))fits=false;
+            }
+            if(fits)for(unsigned k=0;k<3;k++)remember_objective(matches+k,lines[k]);
+        }
+    }
+    for(unsigned i=0;i<3;i++)if(!keys[i] && (visible&(1u<<i)))
+        keys[i]=director_text(matches[i]==DIRECTOR_NONE?stage[i]:matches[i]);
+}
+
 static bool is_moving_panel(const EntityDef *entity){
     const char *path=director_text(entity->name),*leaf=strrchr(path,':');
     leaf=leaf?leaf+1:path;

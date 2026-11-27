@@ -32,6 +32,10 @@ int main(void){
     }
     closedir(dir);assert(checked==199 && opens==1);
     char out[192];localization_read("tip_02",out,sizeof out);assert(*out);
+    const char *key=localization_key_for_saved_text(out,sizeof out);
+    assert(key && !strcmp(key,"tip_02"));
+    assert(!localization_key_for_saved_text("",sizeof out));
+    assert(!localization_key_for_saved_text("Unrecognized legacy caption",sizeof out));
     localization_read("../../unknown",out,sizeof out);assert(!*out);localization_close();
     localization_read("tip_02",out,sizeof out);assert(!*out);
     corrupt=true;assert(!localization_open());localization_close();

@@ -180,18 +180,25 @@ static void pickup(const char *name) {
     if(inventory.equipped<0 || (ui_settings.autoswitch && fresh)){inventory.equipped=gun;inventory.zoom=1;}
     hud_dirty=true;
 }
-static void localized(const char *key,char *text,size_t capacity) {
-    localization_read(key,text,capacity);
+static void copy_text_key(char *out,size_t capacity,const char *key) {
+    snprintf(out,capacity,"%s",key?key:"");
 }
 static void objective(const char *key,unsigned line) {
-    if(line<3){localized(key,current_objective[line],sizeof current_objective[line]);hud_dirty=true;}
+    if(line<3){copy_text_key(current_objective[line],sizeof current_objective[line],key);hud_dirty=true;}
 }
 static void objective_text(char result[483]) {
     result[0]=0;
-    for(unsigned i=0;i<3;i++)if(current_objective[i][0]){
+    for(unsigned i=0;i<3;i++){
+        char line[sizeof current_objective[i]];
+        localization_read(current_objective[i],line,sizeof line);
+        if(!line[0])continue;
         if(result[0])strcat(result," ");
-        strcat(result,current_objective[i]);
+        strcat(result,line);
     }
+}
+static void set_caption(const char *key,float seconds,bool always) {
+    copy_text_key(journal_state.caption,sizeof journal_state.caption,key);
+    journal_state.seconds=seconds;journal_state.always=always;hud_dirty=true;
 }
 static void action(unsigned id,const char *op,const char *const *args,unsigned count) {
     presentation_event(op,args,count);
@@ -231,12 +238,11 @@ static void action(unsigned id,const char *op,const char *const *args,unsigned c
     if(!strcmp(op,"gm_resetlevelitems")){memset(journal_state.items,0,sizeof journal_state.items);hud_dirty=true;}
     if(!strcmp(op,"mphm_printinventory") && count>=2) {
         unsigned line=atoi(args[1]);
-        if(line<3)localized(args[0],journal_state.items[line],sizeof journal_state.items[line]);
+        if(line<3)copy_text_key(journal_state.items[line],sizeof journal_state.items[line],args[0]);
         hud_dirty=true;
     }
     if(!strcmp(op,"mphm_print") || !strcmp(op,"mphm_printtip") || !strcmp(op,"mphm_printtipalways") || (!strcmp(op,"mphm_printtipnym") && game_run.mode==NEW_YORK_MINUTE)){
-        localized(args[0],journal_state.caption,sizeof journal_state.caption);
-        journal_state.seconds=6;journal_state.always=strcmp(op,"mphm_printtip")!=0;hud_dirty=true;
+        set_caption(args[0],6,strcmp(op,"mphm_printtip")!=0);
     }
     if(!strcmp(op,"gm_transferplayerweaponto") && count)
         director_transfer_weapon(args[0],inventory.equipped>=0?guns[inventory.equipped].id:"");
@@ -299,8 +305,7 @@ static bool collect_drop(const Projectile *drop,const char *name){
         for(unsigned i=0;i<2 && g->weapons[i][0];i++)pickup(g->weapons[i]);
         grant_ammo(g->ammo,g->amount);
         bank_sound(0,"level_items",g->sound);
-        localized(g->caption,journal_state.caption,sizeof journal_state.caption);
-        journal_state.seconds=6;journal_state.always=true;
+        set_caption(g->caption,6,true);
     }else if(pills)grant_ammo("painkiller",1);
     else{
         pickup(name);
@@ -1442,15 +1447,18 @@ static void simulate_actors(Player *p,float dt) {
     (void)p;
 }
 static void hud(bool reloading) {
-    bool caption=journal_state.caption[0] && journal_state.seconds>0 && (journal_state.always || ui_settings.tips);
+    char message[sizeof journal_state.caption]="";
+    if(journal_state.seconds>0 && (journal_state.always || ui_settings.tips))
+        localization_read(journal_state.caption,message,sizeof message);
+    bool caption=message[0]!=0;
     if(presentation_value(presentation.visibility)<.5f && !director.state[0].dead) {
-        ui_caption(chapter,caption?journal_state.caption:"");hud_dirty=false;return;
+        ui_caption(chapter,message);hud_dirty=false;return;
     }
     int gun=inventory.equipped;
     Stock s=gun<0?(Stock){0}:inventory.stock[gun];
     char task[483];objective_text(task);
     ui_begin_update();
-    ui_hud(chapter,director.state[0].dead?MP_TEXT("A   Продолжить","A   Continue"):caption?journal_state.caption:task,gun>=0?guns[gun].title:NULL,
+    ui_hud(chapter,director.state[0].dead?MP_TEXT("A   Продолжить","A   Continue"):caption?message:task,gun>=0?guns[gun].title:NULL,
            (unsigned)fmaxf(0,ceilf(director.state[0].hp*100/maximum_health())),inventory.pills,gun<0?-1:(int)guns[gun].pose,
            s.rounds,gun<0?0:ammo_pool(gun)->reserve,reloading,gun==SNIPER?inventory.zoom:0,gun>=0,0,0,caption && journal_state.always);
     ui_journal_link();ui_combat_hud(inventory.bullet_time,inventory.slow,player_crouched,director.player_slow);
@@ -1464,6 +1472,7 @@ static void hud(bool reloading) {
     ui_end_update();
     hud_dirty=false;
 }
+enum { SAVE_TEXT_KEYS=13 };
 typedef struct {
     uint32_t version,count;
     Player player;Jump jump;Animation animation;Inventory inventory;
@@ -1577,7 +1586,7 @@ static void finish_autosave(void){
 }
 static bool snapshot(bool background,unsigned slot,const char *stage,const Player *p,const Jump *jump,const Animation *a,float cooldown) {
     size_t size=checkpoint_size()+sizeof(SaveJournal)+sizeof particle_sources+1+sizeof director.pause_remaining+sizeof(GameRun)+director.count*sizeof(ActorExtra)+arsenal_size()+playback_size()+bank_ambient_size();Checkpoint *c=calloc(1,size);if(!c) return false;
-    c->version=12;c->count=director.count;c->player=*p;c->jump=*jump;c->animation=*a;c->inventory=inventory;
+    c->version=SAVE_TEXT_KEYS;c->count=director.count;c->player=*p;c->jump=*jump;c->animation=*a;c->inventory=inventory;
     c->cooldown=cooldown;c->speed=director.speed;c->controls=director.controls;c->widescreen=director.widescreen;
     c->presentation=presentation;c->path=director.path;
     c->camera=director.camera;c->objective=director.objective;
@@ -1617,6 +1626,30 @@ static bool valid_animation(const Animation *a){
            (unsigned)a->weapon<WEAPON_COUNT && isfinite(a->gait_time) && isfinite(a->previous_time) && isfinite(a->action_time) &&
            isfinite(a->transition) && isfinite(a->script_time);
 }
+static void restore_objectives(const Checkpoint *c) {
+    if(c->version>=SAVE_TEXT_KEYS){
+        memcpy(current_objective,c->prompt,sizeof current_objective);
+        return;
+    }
+    const char *keys[3]={0};unsigned visible=0;
+    for(unsigned i=0;i<3;i++)if(c->prompt[i][0]){
+        visible|=1u<<i;
+        keys[i]=localization_key_for_saved_text(c->prompt[i],sizeof c->prompt[i]);
+    }
+    director_recover_objectives(c->objective,visible,keys);
+    for(unsigned i=0;i<3;i++)
+        copy_text_key(current_objective[i],sizeof current_objective[i],keys[i]);
+}
+static void restore_journal(const Journal *saved,unsigned version) {
+    journal_state=*saved;
+    if(version>=SAVE_TEXT_KEYS)return;
+    for(unsigned i=0;i<3;i++){
+        size_t size=sizeof saved->items[i];
+        copy_text_key(journal_state.items[i],size,localization_key_for_saved_text(saved->items[i],size));
+    }
+    size_t size=sizeof saved->caption;
+    copy_text_key(journal_state.caption,size,localization_key_for_saved_text(saved->caption,size));
+}
 static bool restore_state(const SaveHeader *h,const Checkpoint *c,Player *p,Jump *j,Animation *a,float *cooldown) {
     size_t fixed=checkpoint_size()+(c->version>=3?sizeof(SaveJournal):0)+(c->version>=4?sizeof particle_sources:0)+
         (c->version>=5)+(c->version>=6?sizeof director.pause_remaining:0)+(c->version>=7?sizeof(GameRun)+director.count*sizeof(ActorExtra):0)+
@@ -1628,7 +1661,7 @@ static bool restore_state(const SaveHeader *h,const Checkpoint *c,Player *p,Jump
         if(saved.reserved>CAST_SLOTS+1)return false;
         playback=playback_size_for(c->version,saved.reserved);fixed+=playback;
     }
-    if(!director_signature_matches(h->signature) || c->version<2 || c->version>12 || c->count!=director.count ||
+    if(!director_signature_matches(h->signature) || c->version<2 || c->version>SAVE_TEXT_KEYS || c->count!=director.count ||
        (c->version>=8?h->bytes<fixed:h->bytes!=fixed) ||
        (c->version>=9 && (c->inventory.infinite_ammo>>GUNS)) || c->inventory.pills>8 || c->inventory.equipped< -1 || c->inventory.equipped>=GUNS || (!memchr(c->prompt[0],0,160) || !memchr(c->prompt[1],0,160) || !memchr(c->prompt[2],0,160)) ||
        (c->camera!=DIRECTOR_NONE && c->camera>=director.count) || !valid_animation(&c->animation) || !isfinite(c->speed) || !isfinite(c->cooldown) ||
@@ -1689,14 +1722,14 @@ static bool restore_state(const SaveHeader *h,const Checkpoint *c,Player *p,Jump
                 for(unsigned i=0;i<CAMPAIGN_PROPS;i++)if(!isfinite(director.pause_remaining[i]) || director.pause_remaining[i]<0)return false;
             }
         }
-        journal_state=extra->journal;memcpy(director.ai_exits,extra->ai_exits,sizeof director.ai_exits);
+        restore_journal(&extra->journal,c->version);memcpy(director.ai_exits,extra->ai_exits,sizeof director.ai_exits);
         director.speed_target=extra->speed_target;director.speed_remaining=extra->speed_remaining;
     }
     memcpy(director.exits,c->exits,sizeof c->exits);memcpy(campaign_props,c->props,sizeof c->props);
     director.speed=c->speed;director.controls=c->controls;director.camera=c->camera;director.widescreen=c->widescreen;
     if(c->path.path!=DIRECTOR_NONE && (camera_path_duration(c->path.path)<=0 || c->path.owner>=director.count))return false;
     presentation=c->presentation;director.path=c->path;
-    director.objective=c->objective;memcpy(current_objective,c->prompt,sizeof c->prompt);
+    director.objective=c->objective;restore_objectives(c);
     *p=c->player;*j=c->jump;*a=c->animation;inventory=c->inventory;*cooldown=c->cooldown;
     retail_restore_animation(a,p->crouched);
     if(inventory.equipped!=SNIPER)inventory.zoom=1;
@@ -1954,9 +1987,13 @@ static bool run_map(const char *stage,UiChoice *next,char following[64],const Sa
         }else if(choice.changed)bank_sound(0,"hud","weaponselectionchanges");
         if(player_input && (down&KEY_TOUCH)) {
             if(gesture.pressed==TOUCH_JOURNAL){
-                char task[483];objective_text(task);bank_pause(true);
+                char task[483],items[3][96],message[sizeof journal_state.caption];
+                objective_text(task);
+                for(unsigned i=0;i<3;i++)localization_read(journal_state.items[i],items[i],sizeof items[i]);
+                localization_read(journal_state.caption,message,sizeof message);
+                bank_pause(true);
                 gyro_set_active(false);
-                ui_journal(task,journal_state.items,journal_state.caption);bank_pause(false);
+                ui_journal(task,items,message);bank_pause(false);
                 previous=svcGetSystemTick();touch=(TouchInput){0};hud_dirty=true;continue;
             }
             if(gesture.pressed==TOUCH_HEAL) down|=KEY_SELECT;
@@ -2148,9 +2185,8 @@ static bool run_map(const char *stage,UiChoice *next,char following[64],const Sa
                             char label[80];
                             if(pills)snprintf(label,sizeof label,"hudprint_pickup_painkillers_full");
                             else snprintf(label,sizeof label,"hudprint_pickup_%s_ammo_full",caption);
-                            localized(label,journal_state.caption,sizeof journal_state.caption);
-                            bank_sound(0,"level_items","pickup_ammo_full");journal_state.always=true;
-                            journal_state.seconds=5;styles[i].pickup_retry=5;hud_dirty=true;
+                            set_caption(label,5,true);
+                            bank_sound(0,"level_items","pickup_ammo_full");styles[i].pickup_retry=5;
                         }
                         continue;
                     }

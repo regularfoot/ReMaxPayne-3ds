@@ -5,4 +5,5 @@
 bool localization_open(void);
 void localization_close(void);
 void localization_read(const char *key,char *out,size_t capacity);
+const char *localization_key_for_saved_text(const char *text,size_t capacity);
 #endif

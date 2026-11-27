@@ -43,3 +43,17 @@ void localization_read(const char *key,char *out,size_t capacity){
     size_t n=strlen(captions[lo].text);if(n>=capacity)n=capacity-1;
     memcpy(out,captions[lo].text,n);out[n]=0;
 }
+
+const char *localization_key_for_saved_text(const char *text,size_t capacity){
+    if(!capacity || !*text)return NULL;
+    const char *key=NULL;
+    size_t size=strlen(text);
+    for(unsigned i=0;i<count;i++){
+        size_t n=strlen(captions[i].text);
+        if(n>=capacity)n=capacity-1;
+        if(n!=size || memcmp(text,captions[i].text,n))continue;
+        if(key)return NULL;
+        key=captions[i].key;
+    }
+    return key;
+}

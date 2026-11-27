@@ -65,9 +65,34 @@ static bool verify_script_clock(void){
     return ok;
 }
 
+static bool verify_saved_objectives(const char *stage){
+    if(!strcmp(stage,"part0_level1")){
+        const char *keys[3]={0};
+        director_recover_objectives(0,3,keys);
+        return keys[0] && !strcmp(keys[0],"obj_house_danger0") &&
+               keys[1] && !strcmp(keys[1],"obj_house_danger1") && !keys[2];
+    }
+    if(!strcmp(stage,"p1_l1b-1")){
+        const char *keys[3]={0};
+        director_recover_objectives(text_id("obj_subway_rats"),5,keys);
+        return keys[0] && !strcmp(keys[0],"obj_subway_find_alex") &&
+               !keys[1] && keys[2] && !strcmp(keys[2],"obj_subway_rats");
+    }
+    if(!strcmp(stage,"p2_l2b-2")){
+        const char *keys[3]={0};
+        director_recover_objectives(0,1,keys);
+        return keys[0] && !keys[0][0] && !keys[1] && !keys[2];
+    }
+    return true;
+}
+
 int main(int argc,char **argv){
     bool alternate=argc==3 && !strcmp(argv[2],"--npc");
     if((argc!=2 && !alternate) || !director_open(argv[1],NULL,stderr) || !campaign_bounds_open(argv[1]))return 1;
+    if(!verify_saved_objectives(argv[1])){
+        fprintf(stderr,"Incorrect legacy objective recovery in %s\n",argv[1]);
+        return 6;
+    }
     visited=calloc(prog.h.messages+1,1);
     EntityState *initial=malloc(director.count*sizeof *initial);
     if(!visited || !initial)return 2;

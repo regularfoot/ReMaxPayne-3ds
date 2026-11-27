@@ -51,6 +51,7 @@ void director_camera_tick(float real);
 unsigned director_view_room(void);
 void director_pose(unsigned entity,Point *position,Point *forward,Point *up);
 const char *director_text(unsigned id);
+void director_recover_objectives(unsigned last,unsigned visible,const char *keys[3]);
 static inline bool director_needs_target(unsigned id){
     return director.requires_combat_target && director.requires_combat_target[id] && director.state[id].aim>=director.count;
 }
