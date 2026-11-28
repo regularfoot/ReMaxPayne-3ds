@@ -537,6 +537,78 @@ static TouchRect entry_rect(enum Page page,int row,bool paused){
     if(page==GENERAL || page==COMBAT || page==LOAD_SLOTS || page==SAVE_SLOTS)return (TouchRect){10,46+40*row,300,36};
     return (TouchRect){10+153*(row%2),46+53*(row/2),147,48};
 }
+static bool menu_selectable(enum Page page,int index,bool paused){
+    if(index<0 || index>=menu_entries(page) || !entry_rect(page,index%menu_rows(page),paused).w)return false;
+    if(page==SAVE_SLOTS)return true;
+    if(page==LOAD_SLOTS)return slot_valid[menu_slot(page,index)];
+    return pages[page].list && enabled(&pages[page].list[index],paused);
+}
+static TouchRect navigation_rect(enum Page page,int index,bool paused){
+    int rows=menu_rows(page);TouchRect r=entry_rect(page,index%rows,paused);
+    // Stack subsequent pages below the current one for vertical navigation.
+    if(page!=ROOT)r.y+=H*(index/rows);
+    return r;
+}
+static int menu_first(enum Page page,bool paused){
+    int first=-1;
+    for(int i=0;i<menu_entries(page);i++)if(menu_selectable(page,i,paused)){
+        TouchRect a=navigation_rect(page,i,paused),b=first<0?a:navigation_rect(page,first,paused);
+        if(first<0 || a.y<b.y || (a.y==b.y && a.x<b.x))first=i;
+    }
+    return first<0?0:first;
+}
+static int menu_valid_position(enum Page page,int index,bool paused){
+    if(menu_selectable(page,index,paused))return index;
+    if(page==ROOT)return menu_first(page,paused);
+    for(int i=index;i<menu_entries(page);i++)if(menu_selectable(page,i,paused))return i;
+    for(int i=index-1;i>=0;i--)if(menu_selectable(page,i,paused))return i;
+    return 0;
+}
+static int menu_move(enum Page page,int index,uint32_t direction,bool paused,int *column){
+    TouchRect a=navigation_rect(page,index,paused);
+    if(!*column)*column=page==ROOT && a.w>250?83:a.x+a.w/2;
+    bool vertical=direction==KEY_DUP || direction==KEY_DDOWN;
+    int sign=direction==KEY_DUP || direction==KEY_DLEFT?-1:1;
+    int best=index,best_cross=10000,best_forward=10000;
+    for(int i=0;i<menu_entries(page);i++)if(i!=index && menu_selectable(page,i,paused)){
+        TouchRect b=navigation_rect(page,i,paused);
+        int forward=sign*(vertical?(2*b.y+b.h)-(2*a.y+a.h):(2*b.x+b.w)-(2*a.x+a.w));
+        if(forward<=0)continue;
+        if(!vertical && (b.y>=a.y+a.h || a.y>=b.y+b.h))continue;
+        int cross=vertical?(*column<b.x?b.x-*column:*column>=b.x+b.w?*column-b.x-b.w+1:0):0;
+        if(forward<best_forward || (forward==best_forward && cross<best_cross)){
+            best=i;best_cross=cross;best_forward=forward;
+        }
+    }
+    TouchRect b=navigation_rect(page,best,paused);
+    // A full-width Resume/Continue tile retains the column used to reach it.
+    if(best!=index && b.w<250)*column=b.x+b.w/2;
+    return best;
+}
+static uint32_t menu_keys(uint32_t keys){
+    uint32_t result=keys&~(KEY_UP|KEY_DOWN|KEY_LEFT|KEY_RIGHT);
+    if((keys&KEY_UP) && !(keys&KEY_DOWN))result|=KEY_DUP;
+    else if((keys&KEY_DOWN) && !(keys&KEY_UP))result|=KEY_DDOWN;
+    else if((keys&KEY_LEFT) && !(keys&KEY_RIGHT))result|=KEY_DLEFT;
+    else if((keys&KEY_RIGHT) && !(keys&KEY_LEFT))result|=KEY_DRIGHT;
+    return result;
+}
+typedef struct {uint32_t key;u64 at;} MenuRepeat;
+static uint32_t menu_repeat(MenuRepeat *repeat,uint32_t down,uint32_t held,u64 tick,bool enabled_repeat,bool percent){
+    uint32_t mask=KEY_DUP|KEY_DDOWN|KEY_DLEFT|KEY_DRIGHT,direction=held&mask;
+    // A diagonal Circle Pad threshold may add a second edge while the chosen
+    // direction is still held. Do not navigate on that unrelated edge.
+    if(direction && (down&mask) && (down&mask)!=direction)down&=~mask;
+    if(!enabled_repeat || !direction || (held&KEY_TOUCH)){*repeat=(MenuRepeat){0};return down;}
+    if(direction!=repeat->key || (down&direction)){
+        bool changed=repeat->key && direction!=repeat->key;
+        repeat->key=direction;repeat->at=tick+SYSCLOCK_ARM11/(percent?4:3);
+        if(changed && !down)down=direction;
+    }else if(!down && tick>=repeat->at){
+        down=direction;repeat->at=tick+SYSCLOCK_ARM11/(percent?15:9);
+    }
+    return down;
+}
 static void draw_menu(enum Page page,int selected,int top,bool paused,int card){
     const PageDef *p=&pages[page];int entries=menu_entries(page),rows=menu_rows(page);
     menu_background(1);
@@ -605,32 +677,32 @@ static void draw_menu(enum Page page,int selected,int top,bool paused,int card){
 }
 static UiChoice menu_loop(bool paused,bool can_save,UiPauseFrame redraw,void *context) {
     allow_save=can_save;refresh_slots();
-    enum Page page=ROOT;int positions[sizeof pages/sizeof *pages]={0};positions[ROOT]=paused?0:1;
+    enum Page page=ROOT;int positions[sizeof pages/sizeof *pages]={0},columns[sizeof pages/sizeof *pages]={0};
+    positions[ROOT]=menu_first(ROOT,paused);
     int top=0,card=0;bool dirty=true;
     static unsigned attract;
     u64 last_input=svcGetSystemTick(),last_frame=last_input-SYSCLOCK_ARM11/15;
-    u64 repeat_at=0;
-    uint32_t repeat_key=0;
+    MenuRepeat repeat={0};enum Page repeat_page=ROOT;
     while(aptMainLoop()) {
         u64 tick=svcGetSystemTick();
         if((unsigned)page>=sizeof pages/sizeof *pages)return UI_EXIT;
         int *position=&positions[page];
         const PageDef *p=&pages[page];
         int entries=menu_entries(page);
+        if(entries)*position=menu_valid_position(page,*position,paused);
+        if(page!=repeat_page){repeat=(MenuRepeat){0};repeat_page=page;}
         top=page==ROOT?0:(*position/menu_rows(page))*menu_rows(page);
         if(dirty) {draw_menu(page,*position,top,paused,card);dirty=false;}
         bank_tick();hidScanInput();
-        uint32_t down=hidKeysDown();
-        uint32_t held=hidKeysHeld();
+        uint32_t down=menu_keys(hidKeysDown());
+        uint32_t held=menu_keys(hidKeysHeld());
         if(held)last_input=tick;
-        uint32_t adjust=held&(KEY_DLEFT|KEY_DRIGHT);
-        bool percent_row=(page==GYRO_MENU || page==AIM_MENU) && percent_max(p->list[*position].argument);
-        if(!percent_row || (adjust!=KEY_DLEFT && adjust!=KEY_DRIGHT))repeat_key=0;
-        else if(adjust!=repeat_key || (down&adjust)){
-            repeat_key=adjust;repeat_at=tick+SYSCLOCK_ARM11/4;
-        }else if(!down && tick>=repeat_at){
-            down=repeat_key;repeat_at=tick+SYSCLOCK_ARM11/15;
+        bool horizontal=held&(KEY_DLEFT|KEY_DRIGHT),percent_row=false,repeat_allowed=true;
+        if(p->list && entries && p->list[*position].action==CHANGE && horizontal){
+            int id=p->list[*position].argument;percent_row=percent_max(id)!=0;
+            repeat_allowed=percent_row || id==DEAD || id==MUSIC || id==VOLUME;
         }
+        down=menu_repeat(&repeat,down,held,tick,repeat_allowed,percent_row);
         if(!paused && page==ROOT && !down && svcGetSystemTick()-last_input>60ULL*SYSCLOCK_ARM11){
             movie_play(attract++%2?"attract01.mpv":"attract00.mpv");ui_title();dirty=true;last_input=svcGetSystemTick();
         }
@@ -674,7 +746,7 @@ static UiChoice menu_loop(bool paused,bool can_save,UiPauseFrame redraw,void *co
                 TouchRect r=entry_rect(page,row,paused);int i=top+row;
                 if(!r.w || !inside(r,pt.px,pt.py))continue;
                 if(!(page==SAVE_SLOTS || (page==LOAD_SLOTS?slot_valid[menu_slot(page,i)]:enabled(&p->list[i],paused))))break;
-                *position=i;dirty=true;accept=true;
+                *position=i;columns[page]=r.x+r.w/2;dirty=true;accept=true;
                 if(p->list && p->list[i].action==CHANGE){
                     int id=p->list[i].argument;unsigned maximum=percent_max(id);
                     if(maximum){
@@ -709,13 +781,12 @@ static UiChoice menu_loop(bool paused,bool can_save,UiPauseFrame redraw,void *co
             }
             continue;
         }
-        int delta=0;
-        if(down&KEY_DUP) delta=-1;
-        if(down&KEY_DDOWN) delta=1;
-        if(page==ROOT && (down&(KEY_DLEFT|KEY_DRIGHT))) delta=(down&KEY_DLEFT)?-1:1;
-        if(delta){
-            do {*position=(*position+delta+entries)%entries;}while(page==ROOT && !entry_rect(ROOT,*position,paused).w);
-            dirty=true;continue;
+        uint32_t direction=down&(KEY_DUP|KEY_DDOWN|KEY_DLEFT|KEY_DRIGHT);
+        bool value_change=p->list && entries && p->list[*position].action==CHANGE &&
+            (direction==KEY_DLEFT || direction==KEY_DRIGHT);
+        if(direction && !value_change){
+            int next=menu_move(page,*position,direction,paused,&columns[page]);
+            dirty|=next!=*position;*position=next;continue;
         }
         if(page==LOAD_SLOTS || page==SAVE_SLOTS) {
             unsigned slot=menu_slot(page,*position);

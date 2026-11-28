@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Navigate touch-menu tiles by their on-screen positions with the D-Pad and Circle Pad, replacing the old linear list order. Preserve the selected column through full-width Continue/Resume tiles.
+- Skip unavailable entries, continue vertically across settings/save pages, and stop at the menu edges instead of wrapping unexpectedly.
+- Add directional hold-repeat while retaining faster numeric sensitivity adjustment and single-press toggles. Ignore conflicting diagonal stick edges.
+- Start on Continue when an autosave exists, otherwise New Game; keep left/right for changing selected settings and B for returning.
+
 ## 0.2.1 — 2026-11-28
 
 Early-access interface readability update for Old 3DS and New 3DS. Includes all changes from 0.2.0.

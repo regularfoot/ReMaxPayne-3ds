@@ -29,6 +29,8 @@ Under **Options → Aim**, stick and touch aiming have separate horizontal and v
 
 The lower-screen menus use large touch tiles and a consistent **Back** button in the upper-right corner. Gameplay options and save slots show four compact rows per page. Loading progress, cutscene captions, notices, and journal text sit near the darker lower edge. Menu edges, hit areas, and lines use whole pixels on the native 320×240 display. Physical button navigation remains available.
 
+Use the D-Pad or Circle Pad to move between tiles in their on-screen directions. Up/down continues through additional pages and skips unavailable entries. Left/right changes the value of a selected setting. Hold a direction to repeat, press **A** to activate, or **B** to return. The main menu starts on Continue when an autosave is available, otherwise New Game.
+
 Text is antialiased at its final display size in both languages, including the closed weapon panel. The HUD uses a sharper health silhouette, larger chapter and painkiller labels, and left-aligned objectives centered vertically for either one or two lines. Reload and empty indicators keep the weapon icon in the same position and size.
 
 Under **Options → Sound → Voice**, choose Russian or English when both audio sets were prepared from your own discs. Spoken lines and graphic-novel narration follow the selection; the interface, objectives, and original comic lettering keep the language of the base build. A line already playing finishes normally; subsequent sounds and the next comic page use the selected voice. Optional disc videos use an alternate version when supplied by the second disc. A single-language build keeps its original audio.
