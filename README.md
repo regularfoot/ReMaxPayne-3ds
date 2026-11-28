@@ -2,7 +2,7 @@
 
 ![Max Payne fires two Berettas during a shoot-dodge on the upper screen of a Nintendo 3DS, with the port's touch-screen HUD below.](docs/remaxpayne-3ds-poster.png)
 
-**ReMaxPayne-3ds** is a fan-made native Max Payne port that works on both **Old 3DS and New 3DS** through the Homebrew Launcher. Version **0.2.0** is an early-access source release for testing on real hardware. See the [changelog](CHANGELOG.md) for the new touch interface, selectable voice audio, graphics fixes, and gameplay improvements.
+**ReMaxPayne-3ds** is a fan-made native Max Payne port that works on both **Old 3DS and New 3DS** through the Homebrew Launcher. Version **0.2.1** is an early-access source release for testing on real hardware. See the [changelog](CHANGELOG.md) for antialiased interface text, HUD refinements, selectable voice audio, graphics fixes, and gameplay improvements.
 
 This project is intended for personal use with data from your own copy of Max Payne for Xbox. Build locally from your supported PAL or NTSC disc image. Keep the resulting game data and 3DSX for your own use.
 
@@ -109,7 +109,7 @@ The release includes fixes for the reported transparency and flicker regressions
 
 The preceding combined gameplay fixes passed host checks, scripted progression through all 67 campaign transitions on PAL and NTSC data, and targeted Old/New profiles in Azahar. The new touch interface passed native hit-area, page navigation, settings migration, and fixed weapon-icon checks. Old 3DS emulator testing covered touch settings and loading a campaign save into the new HUD. Selectable voice audio has separate conversion and runtime checks.
 
-Version 0.2.0 remains an early-access test build. Physical-console testing of the complete new release is still needed. Some hardware-specific graphical artifacts and Xbox cutscene letterboxing remain under investigation; further real-hardware reports are welcome.
+Version 0.2.1 remains an early-access test build. Physical-console testing of the complete new release is still needed. Some hardware-specific graphical artifacts and Xbox cutscene letterboxing remain under investigation; further real-hardware reports are welcome.
 
 ## Credits
 
