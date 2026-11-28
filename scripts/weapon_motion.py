@@ -1,12 +1,11 @@
 """Bake rigid KF2 node motion relative to the same bind pose as the item mesh."""
-from collections import defaultdict
 from pathlib import Path
 import posixpath,re,struct
 import numpy as np
 from max_payne_sdk.max_kf2 import MaxKF2Reader
 from pack_player import affine,sample
 
-def pack_weapon_motion(read,config,base,doc,mesh,scratch,out):
+def pack_weapon_motion(read,config,base,doc,draw_runs,scratch,out):
     # Muzzle particles and projectiles use the authored weapon-local frame.
     clean=re.sub(r'//[^\r\n]*','',config)
     offset=re.search(r'\bProjectileOffset\s*=\s*\(([^)]+)\)',clean,re.I)
@@ -27,12 +26,8 @@ def pack_weapon_motion(read,config,base,doc,mesh,scratch,out):
             return result[n]
         return [resolve(n) for n in bones]
     inverse=[np.linalg.inv(m) for m in world(rest)]
-    groups=defaultdict(list)
-    for i,g in enumerate(mesh.meshes):
-        counts=defaultdict(int)
-        for face in g.faces:counts[g.materials[face.material]]+=3
-        for material,n in counts.items():groups[material].append((i,n))
-    runs=[struct.pack('<HHI',i,m,n) for m,values in enumerate(groups.values()) for i,n in values]
+    runs=[struct.pack('<HHI',node,material|(0x8000 if cull else 0),count)
+          for node,material,cull,count in draw_runs]
     animations=dict((k.upper(),v.strip().replace('\\','/').lower()) for k,v in re.findall(
         r'\[Animation\]\s*Index\s*=\s*(\w+);\s*Filename\s*=\s*([^;]+)',config,re.I))
     tracks=[]

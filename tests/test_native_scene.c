@@ -90,6 +90,17 @@ static void test_weapon_picker(void){
 }
 
 static void test_touch(void) {
+    for(unsigned vertical=0;vertical<2;vertical++){
+        float stick=touch_look_angle(.6f,0,.02f,100,100,vertical);
+        float touch=touch_look_angle(0,11,.02f,100,100,vertical);
+        assert(fabsf(touch_look_angle(.6f,11,.02f,25,250,vertical)-(.25f*stick+2.5f*touch))<1e-6f);
+        assert(fabsf(touch_look_angle(.6f,11,.02f,250,25,vertical)-(2.5f*stick+.25f*touch))<1e-6f);
+        for(unsigned setting=0;setting<=4;setting++){
+            unsigned percent=50+25*setting;
+            assert(fabsf(touch_look_angle(.6f,11,.02f,percent,percent,vertical)-
+                         (stick+touch)*(.5f+.25f*setting))<1e-6f);
+        }
+    }
     assert(cstick_axis(24,0)==0 && cstick_axis(-24,1)==0);
     assert(cstick_axis(25,1)>0 && cstick_axis(-25,1)==-cstick_axis(25,1));
     assert(cstick_axis(44,4)==0 && cstick_axis(150,4)==1 && cstick_axis(-156,1)==-1);
@@ -152,6 +163,12 @@ static void test_panel_contact(void) {
     };
     uint8_t masks[]={SCENE_BODY,SCENE_BODY|SCENE_SHOT,SCENE_BODY|SCENE_SHOT};
     assert(scene_open_masks(faces,3,masks));
+    Player below={0};
+    Triangle overhead={{-1,1.6f,-1},{1,1.6f,-1},{0,1.6f,1},1};
+    assert(isinf(scene_panel_distance(&overhead,&below)));
+    assert(scene_overhead_distance(&overhead,&below)==0);
+    below.position.y=-.3f;
+    assert(isinf(scene_overhead_distance(&overhead,&below)));
     for(unsigned crouch=0;crouch<2;crouch++){
         Player max={.position={-.04f,0,0},.crouched=crouch},npc=max;
         Jump jump={0};

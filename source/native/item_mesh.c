@@ -6,7 +6,7 @@
 #include <math.h>
 #include <string.h>
 
-enum { MATERIALS=12, MODELS=56 };
+enum { MATERIALS=12, MODELS=56, RUN_CULL_BACK_FACES=0x8000 };
 typedef struct { Point position; float uv[2]; } Vertex;
 typedef struct {uint16_t node,material;uint32_t count;} DrawRun;
 typedef struct {float row[3][4];} NodePose;
@@ -105,7 +105,10 @@ static bool read_motion(Model *m,const char *name,unsigned total) {
     }
     unsigned vertices=0;
     for(unsigned i=0;ok && i<m->run_count;i++){
-        DrawRun r=m->runs[i];ok=r.node<m->nodes && r.material<m->loaded && r.count<=total-vertices;vertices+=r.count;
+        DrawRun r=m->runs[i];
+        ok=r.node<m->nodes && (r.material&~RUN_CULL_BACK_FACES)<m->loaded &&
+           r.count && r.count%3==0 && r.count<=total-vertices;
+        vertices+=r.count;
     }
     for(unsigned i=0;ok && i<3;i++){
         Track *t=m->tracks+i;
@@ -199,7 +202,9 @@ void item_weapon_draw(const char *name,int uniform,const C3D_Mtx *hand,unsigned 
             pose.r[k]=FVec4_New(v[0],v[1],v[2],v[3]);
         }
         Mtx_Multiply(&world,hand,&pose);C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER,uniform,&world);
-        C3D_TexBind(0,m->textures+run.material);C3D_DrawArrays(GPU_TRIANGLES,first,run.count);first+=run.count;
+        C3D_CullFace(run.material&RUN_CULL_BACK_FACES?GPU_CULL_FRONT_CCW:GPU_CULL_NONE);
+        C3D_TexBind(0,m->textures+(run.material&~RUN_CULL_BACK_FACES));
+        C3D_DrawArrays(GPU_TRIANGLES,first,run.count);first+=run.count;
     }
 }
 const char *item_weapon_effect(const char *name,Point *offset){

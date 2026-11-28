@@ -219,8 +219,14 @@ bool pose_message_matches(unsigned action,const char *op,const char *first,const
     return false;
 }
 bool pose_has_event(unsigned action,const char *op){
+    return pose_has_target_event(action,NULL,op);
+}
+bool pose_has_target_event(unsigned action,const char *target,const char *op){
     CueRange range=range_for(action);
-    for(unsigned i=0;i<range.count;i++)if(!strcmp(cue_strings[cue_rows[range.first+i].op],op))return true;
+    for(unsigned i=0;i<range.count;i++){
+        FrameCue c=cue_rows[range.first+i];
+        if(!strcmp(cue_strings[c.op],op) && (!target || !strcmp(cue_strings[c.target],target)))return true;
+    }
     return false;
 }
 void pose_events(unsigned actor,unsigned action,float after,float through,PoseMessage send){

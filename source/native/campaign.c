@@ -521,7 +521,7 @@ typedef struct {
     const SkinRules *rules;
     const FireRate *fire_rate;
     ActorTimeline timeline;
-    uint8_t muzzle_pending; // Runtime only; beyond the compatible save prefix.
+    const char *weapon_effect[2]; // Runtime only; beyond the compatible save prefix.
 
 } MotionStyle;
 static MotionStyle *styles;
@@ -546,6 +546,7 @@ bool campaign_reticle_visible(void){return reticle_visible;}
 static bool attacking(Clip action){
     return action==FIRE || action==THROW_ITEM || action==SWING;
 }
+static const char *const weapon_targets[]={"righthandweapon","lefthandweapon"};
 static void release_round(unsigned id,int gun,int side,bool quiet){
     EntityState *e=director.state+id;
     if(!e->enabled || e->dead || !motion_effects || combat_waits_for_target(id))return;
@@ -569,7 +570,11 @@ static void release_round(unsigned id,int gun,int side,bool quiet){
         if(id){if(!arsenals[id]->rounds[gun])return;arsenals[id]->rounds[gun]--;}
         else{if(!inventory.stock[gun].rounds)return;inventory.stock[gun].rounds--;hud_dirty=true;}
         eject_cases(id,gun,false,1,side);
-        if(!quiet)styles[id].muzzle_pending|=side<0?2:1;
+        unsigned hand=side<0;
+        MotionStyle *style=styles+id;
+        const char *effect=quiet?NULL:item_weapon_effect(weapon_mesh(gun),NULL);
+        if(effect && effect[0] && !pose_has_target_event(style->shots[0],weapon_targets[hand],"ps_starteffect"))
+            style->weapon_effect[hand]=effect;
     }
     if(gun==BAT || gun==PIPE){
         Point origin,axes[3];const Animation *a=id?&actors[id].animation:motion_player_animation;
@@ -635,12 +640,16 @@ static void frame_message(unsigned id,const char *target,const char *op,const ch
     }else if(!strcmp(op,"c_jump")){
         if(!id && motion_jump && (pending_jump || inventory.dodge_time>0) && !motion_jump->airborne){motion_jump->velocity=strtof(args[0],NULL);motion_jump->airborne=true;pending_jump=0;}
     }else if(!strcmp(op,"ws_hide"))s->hidden=on;
-    else if(!strcmp(op,"ws_animate") || !strcmp(op,"ws_animateshooting")){
-        unsigned hand=!strcmp(target,"lefthandweapon");
+    else if(!strcmp(op,"ps_starteffect") && n && (!strcmp(target,weapon_targets[0]) || !strcmp(target,weapon_targets[1]))){
+        // A cue addressed to a weapon uses its socket, and can fall on a
+        // different frame from the ammunition and projectile event.
+        s->weapon_effect[!strcmp(target,weapon_targets[1])]=args[0];
+    }else if(!strcmp(op,"ws_animate") || !strcmp(op,"ws_animateshooting")){
+        unsigned hand=!strcmp(target,weapon_targets[1]);
         s->weapon_track[hand]=strstr(args[0],"reload")?2:strstr(args[0],"shoot")?1:0;
         s->weapon_cued[hand]=true;s->weapon_time[hand]=0;
         if(s->attack_events && !s->previous_fire_paid && !strcmp(op,"ws_animateshooting"))
-            release_round(id,gun,!strcmp(target,"lefthandweapon")?-1:1,strstr(args[0],"_noeffects")!=NULL);
+            release_round(id,gun,hand?-1:1,strstr(args[0],"_noeffects")!=NULL);
     }else if(!strcmp(op,"cam_animateinplace") || !strcmp(op,"cam_animateplayerparented")){
         if(!id && director.path.path==DIRECTOR_NONE){
             int path=camera_path_id(args[0]);
@@ -1126,13 +1135,23 @@ static bool prepare_models(unsigned count) {
     }
     return true;
 }
-typedef struct {const Player *player;const Animation *animation;const Effects *effects;Camera entry;PauseCamera orbit;} CampaignPause;
+typedef struct {
+    const Player *player;
+    const Animation *animation;
+    const Effects *effects;
+    Camera entry;
+    PauseCamera orbit;
+    unsigned zoom;
+} CampaignPause;
 static void pause_frame(float dt,void *context){
     CampaignPause *pause=context;
     if(dt>=0)scene_pause_step(&pause->orbit,dt,camera_obstacle);
     const Camera *view=dt<0?&pause->entry:&pause->orbit.view;
+    // Resolve the camera's room along the same boom the orbit swept through
+    // doorways. The gameplay camera's higher pivot can take a different path.
+    const Point *pivot=dt>=0 && pause->orbit.orbiting?&pause->orbit.pivot:NULL;
     Enemy cast[CAST_SLOTS]={0};unsigned count=0;
-    if(!local_cast(pause->player,view,NULL,cast,&count) || !prepare_models(count))return;
+    if(!local_cast(pause->player,view,pivot,cast,&count) || !prepare_models(count))return;
     for(unsigned k=0;k<count;k++){
         MotionStyle *s=styles+actor_ids[k];
         actor_motion(k+1,s->render_gait,s->render_time,s->render_action,s->render_overlay,s->whole,s->gun<0,
@@ -1140,7 +1159,7 @@ static void pause_frame(float dt,void *context){
         actor_set_timeline(k+1,&s->timeline);
         aiming_motion(k+1,actor_ids[k],&actors[actor_ids[k]].body,NULL);
     }
-    room_render_campaign(pause->player,pause->animation,view,pause->effects,cast,count,inventory.equipped<0,1);
+    room_render_campaign(pause->player,pause->animation,view,pause->effects,cast,count,inventory.equipped<0,dt<0?pause->zoom:1);
 }
 Point campaign_actor_feet(unsigned slot){return director.state[slot?actor_ids[slot-1]:0].position;}
 uint32_t campaign_actor_light(unsigned slot) {
@@ -1238,21 +1257,19 @@ void campaign_prepare_weapon_effects(unsigned visible,unsigned count){
     // one emission at the very same socket used to draw each weapon.
     for(unsigned instance=0;instance<=count;instance++){
         unsigned id=instance?actor_ids[instance-1]:0;
-        MotionStyle *s=styles+id;int gun=s->gun;
-        if(!(visible&(1u<<instance)) || !s->muzzle_pending || gun<0 || s->hidden)continue;
-        const char *effect=item_weapon_effect(weapon_mesh(gun),NULL);
-        if(!effect || !effect[0])continue;
+        MotionStyle *s=styles+id;
+        if(!(visible&(1u<<instance)) || (!s->weapon_effect[0] && !s->weapon_effect[1]) || s->gun<0 || s->hidden)continue;
         const Player *body=instance?&actors[id].body:motion_player;
         float cs=cosf(body->yaw),sn=sinf(body->yaw);
-        for(unsigned hand=0;hand<2;hand++)if(s->muzzle_pending&(1u<<hand)){
+        for(unsigned hand=0;hand<2;hand++)if(s->weapon_effect[hand]){
             float m[3][4];actor_draw_hand(instance,hand!=0,m);
             Point origin={body->position.x+cs*m[0][3]+sn*m[2][3],body->position.y+m[1][3],body->position.z-sn*m[0][3]+cs*m[2][3]};
             Point forward={cs*m[0][2]+sn*m[2][2],m[1][2],-sn*m[0][2]+cs*m[2][2]};
             Point up={cs*m[0][1]+sn*m[2][1],m[1][1],-sn*m[0][1]+cs*m[2][1]};
-            particles_weapon_burst(id,director.state[id].room,origin,forward,up,effect);
+            particles_weapon_burst(id,director.state[id].room,origin,forward,up,s->weapon_effect[hand]);
         }
     }
-    for(unsigned id=0;id<director.count;id++)styles[id].muzzle_pending=0;
+    for(unsigned id=0;id<director.count;id++)styles[id].weapon_effect[0]=styles[id].weapon_effect[1]=NULL;
 }
 static void simulate_actors(Player *p,float dt) {
     for(unsigned i=1;i<director.count;i++) {
@@ -1741,6 +1758,9 @@ static bool restore_state(const SaveHeader *h,const Checkpoint *c,Player *p,Jump
     if(c->version<9)inventory.infinite_ammo=0;
     return enter(director.state[0].room);
 }
+static void restart_frame_clock(APT_HookType event,void *context){
+    if(event==APTHOOK_ONRESTORE || event==APTHOOK_ONWAKEUP)*(bool*)context=true;
+}
 static bool run_map(const char *stage,UiChoice *next,char following[64],const SaveHeader *header,const Checkpoint *saved) {
     u64 load_begin=svcGetSystemTick();
     unsigned automatic_slot=save_autosave_slot(stage);
@@ -1775,7 +1795,7 @@ static bool run_map(const char *stage,UiChoice *next,char following[64],const Sa
     motion_effects=&fx;motion_player=&p;motion_camera=&camera;motion_player_animation=&anim;motion_jump=&jump;pending_jump=0;dodge_scale=dodge_target=1;dodge_fade=0;dodge_block=false;reticle_visible=true;
     controlled_scale=1;music_mix=1;heartbeat=0;camera_pose_offset=0;
     float cooldown=0,death_time=0;
-    unsigned count=0,frames=0;
+    unsigned count=0,frames=0,rendered_zoom=1;
     if(saved && !restore_state(header,saved,&p,&jump,&anim,&cooldown)) goto done;
     if(saved && saved->version<11)for(unsigned i=0;i<director.count;i++){
         styles[i].skip_past=true;
@@ -1791,7 +1811,7 @@ static bool run_map(const char *stage,UiChoice *next,char following[64],const Sa
     player_listener(player->room,&p);
     const GameTuning *tuning=game_tuning();
     combat_set_health_scales(tuning->player_health,tuning->enemy_health);
-    if(saved && retry_deaths>game_run.deaths)game_run.deaths=retry_deaths;
+    if(retry_deaths>game_run.deaths)game_run.deaths=retry_deaths;
     retry_deaths=0;unsigned locked=DIRECTOR_NONE;float look_idle=0,since_hit=0;
     float focus_distance=0,focus_weight=0;
     player_crouched=p.crouched;
@@ -1823,8 +1843,15 @@ static bool run_map(const char *stage,UiChoice *next,char following[64],const Sa
     if(log_file){fprintf(log_file,"LOAD ready stage=%s elapsed_ms=%.1f\n",stage,(svcGetSystemTick()-load_begin)*(1000./SYSCLOCK_ARM11));fflush(log_file);}
     hud_dirty=true;ok=true;
     u64 previous=svcGetSystemTick(),ready_tick=previous;bool control_logged=false,control_draw_logged=false;
+    bool woke=false;
+    aptHookCookie clock_hook;
+    aptHook(&clock_hook,restart_frame_clock,&woke);
     while(aptMainLoop()) {
         u64 frame_start=svcGetSystemTick();
+        if(woke){
+            // HOME and sleep are outside active play, including in New York Minute.
+            previous=frame_start;touch=(TouchInput){0};woke=false;
+        }
         SetupTiming setup={0};u64 section=frame_start;
         unsigned frame_room=campaign_room_id();
         async_log_watch("audio");
@@ -1901,7 +1928,7 @@ static bool run_map(const char *stage,UiChoice *next,char following[64],const Sa
             ui_weapon_close();gyro_set_active(false);
             finish_autosave();bank_pause(true);
             bool can_save=!player->dead && (!game_save_limit() || game_run.saves<game_save_limit());
-            CampaignPause pause={.player=&p,.animation=&anim,.effects=&fx,.entry=camera};
+            CampaignPause pause={.player=&p,.animation=&anim,.effects=&fx,.entry=camera,.zoom=rendered_zoom};
             scene_pause_begin(&pause.orbit,&camera,&p);
             UiChoice choice=player_input?ui_pause_menu(can_save,pause_frame,&pause):ui_menu(true,can_save);
             if(choice==UI_ANIMATIONS){room_animation_gallery();choice=UI_RESUME;}
@@ -1949,7 +1976,8 @@ static bool run_map(const char *stage,UiChoice *next,char following[64],const Sa
             Enemy cast[CAST_SLOTS]={0};
             if(!(ok=local_cast(&p,&camera,framed_body?&pivot:NULL,cast,&count) && prepare_models(count)))break;
             retail_motion(0,0,&anim,&p,inventory.equipped,advance,0,0,MOTION_NONE);
-            room_render_campaign(&p,&anim,&camera,&fx,cast,count,inventory.equipped<0,1);
+            rendered_zoom=1;
+            room_render_campaign(&p,&anim,&camera,&fx,cast,count,inventory.equipped<0,rendered_zoom);
             continue;
         }
         death_time=0;
@@ -2010,7 +2038,7 @@ static bool run_map(const char *stage,UiChoice *next,char following[64],const Sa
         if(player_input && toggle_slow && director.player_slow && !dodge_block && (inventory.slow || inventory.bullet_time>.001f)){
             inventory.slow=!inventory.slow;hud_dirty=true;
         }
-        if((ui_touch_shortcuts() && gesture.pressed==TOUCH_FIRE) || (down&KEY_ZR)) down|=KEY_R;
+        if(ui_touch_shortcuts() && gesture.pressed==TOUCH_FIRE)down|=KEY_R;
         if(ui_touch_shortcuts() && gesture.held==TOUCH_FIRE)held|=KEY_R;
 
         MotionEvent interaction=MOTION_NONE;
@@ -2057,8 +2085,8 @@ static bool run_map(const char *stage,UiChoice *next,char following[64],const Sa
         if(player_input) {
             GyroLook motion=gyro_read(real,ui_settings.gyro_horizontal,ui_settings.gyro_vertical);
             float turn=cstick_axis(look.dx,ui_settings.deadzone),pitch=cstick_axis(look.dy,ui_settings.deadzone);
-            float manual_yaw=touch_look_angle(turn+!!(held&KEY_DRIGHT)-!!(held&KEY_DLEFT),gesture.dx,real,ui_settings.horizontal,false);
-            float manual_pitch=touch_look_angle(pitch+!!(held&KEY_DUP)-!!(held&KEY_DDOWN),gesture.dy,real,ui_settings.vertical,true);
+            float manual_yaw=touch_look_angle(turn+!!(held&KEY_DRIGHT)-!!(held&KEY_DLEFT),gesture.dx,real,ui_settings.stick_horizontal,ui_settings.touch_horizontal,false);
+            float manual_pitch=touch_look_angle(pitch+!!(held&KEY_DUP)-!!(held&KEY_DDOWN),gesture.dy,real,ui_settings.stick_vertical,ui_settings.touch_vertical,true);
             styles[0].manual_turn=manual_yaw/inventory.zoom;
             p.yaw+=styles[0].manual_turn+motion.yaw/inventory.zoom;
             float angle=(manual_pitch+motion.pitch)/inventory.zoom;
@@ -2347,7 +2375,7 @@ static bool run_map(const char *stage,UiChoice *next,char following[64],const Sa
         if(gun>=0 && gun==styles[0].gun && !styles[0].holstering && !styles[0].drawing) {
             Stock *stock=inventory.stock+gun;const Gun *g=guns+gun;
             if(was_loading && anim.action!=RELOAD && !pose_has_event(styles[0].reload,"c_reload"))refill_player(gun);
-            bool fire=player_input && !death_view && (anim.action==IDLE || anim.action==FIRE) && ((down&KEY_R) || (g->automatic && (held&(KEY_R|KEY_ZR))));
+            bool fire=player_input && !death_view && (anim.action==IDLE || anim.action==FIRE) && ((down&KEY_R) || (g->automatic && (held&KEY_R)));
             if(fire && ui_settings.autoswitch && g->capacity && !stock->rounds && !spare_rounds(gun)){
                 const int best[]={JACKHAMMER,COMMANDO,DUAL_INGRAM,INGRAM,PUMP,SAWED,EAGLE,DUAL_PISTOL,PISTOL,BAT,PIPE};
                 for(unsigned i=0;i<sizeof best/sizeof *best;i++){
@@ -2377,7 +2405,8 @@ static bool run_map(const char *stage,UiChoice *next,char following[64],const Sa
         }
         if(hud_dirty) hud(anim.action==RELOAD);
         u64 draw_start=svcGetSystemTick();
-        room_render_campaign(&p,&anim,&camera,&fx,render,count,gun<0,view_zoom);
+        rendered_zoom=view_zoom;
+        room_render_campaign(&p,&anim,&camera,&fx,render,count,gun<0,rendered_zoom);
         if(log_file && director.controls && !player->dead){
             u64 end=svcGetSystemTick(),ticks=end-frame_start;
             unsigned room=campaign_room_id();
@@ -2405,6 +2434,7 @@ static bool run_map(const char *stage,UiChoice *next,char following[64],const Sa
         }
         if(!frames++ && log_file){fprintf(log_file,"CAMPAIGN draw %s actors=%u hp=%.1f\n",campaign_room_name(),count,player->hp);fflush(log_file);}
     }
+    aptUnhook(&clock_hook);
 done:
     async_log_watch(NULL);
     gyro_prepare(false);

@@ -494,6 +494,16 @@ bool combat_launch(const char *name,unsigned owner,unsigned room,Point origin,Po
 bool combat_launch_attached(const char *name,unsigned owner,unsigned room,Point origin,const Point axes[3]){
     return launch_projectile(name,owner,room,origin,axes[2],NULL,axes);
 }
+static bool cosmetic_projectile(unsigned id){
+    const Type *type=types+id;
+    if(type->damage || type->count || type->impact || type->timed || type->drop[0] ||
+       !visuals || (!visuals[id].debris && !visuals[id].decal))return false;
+    if(cue_index)for(unsigned i=cue_index[id];i<cue_index[id+1];i++){
+        // A child projectile or an alert can affect gameplay even without damage here.
+        if(cues[i].op==3 || cues[i].op==4)return false;
+    }
+    return true;
+}
 static bool launch_projectile(const char *name,unsigned owner,unsigned room,Point origin,Point forward,const uint32_t *previous,const Point *axes){
     int id=projectile_id(name);
     if(id<0 || owner>=director.count) return false;
@@ -513,7 +523,10 @@ static bool launch_projectile(const char *name,unsigned owner,unsigned room,Poin
         }
 
     }
-    for(unsigned i=0;i<PROJECTILE_LIMIT;i++) if(!campaign_projectiles[i].active) {
+    // Leave slots for live rounds, pickups and damage volumes during visual bursts.
+    enum { COMBAT_RESERVE=16 };
+    unsigned limit=cosmetic_projectile(id)?PROJECTILE_LIMIT-COMBAT_RESERVE:PROJECTILE_LIMIT;
+    for(unsigned i=0;i<limit;i++) if(!campaign_projectiles[i].active) {
         float speed=types[id].speed;
         if(v && v->scatter>0)speed*=1+v->scatter*(2.f*rand()/(float)RAND_MAX-1);
         campaign_projectiles[i]=(Projectile){.position=origin,.velocity=along((Point){0},forward,speed),

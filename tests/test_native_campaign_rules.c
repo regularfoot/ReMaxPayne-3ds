@@ -33,9 +33,11 @@ static void verify_checkpoint_recovery(void) {
     const char *payloads[] = {"initial room", "next room", "retry room"};
     SaveHeader header;
     unsigned initial_generation=0;
+    assert(!save_loadable(5));
     for (unsigned i = 0; i < 3; i++) {
         size_t size = strlen(payloads[i]) + 1;
         assert(save_write(5, stage, "test", 42, payloads[i], size));
+        assert(save_loadable(5));
         char *written = save_read(5, &header);
         assert(written && header.bytes == size);
         assert(!memcmp(written, payloads[i], size));
@@ -43,15 +45,19 @@ static void verify_checkpoint_recovery(void) {
         if (i == 0) {initial_generation=header.generation;continue;}
         assert((int32_t)(header.generation-initial_generation)>0);
         damage_checkpoint(5,header.generation);
+        assert(save_loadable(5));
         char *fallback = save_read(5, &header);
         assert(fallback && header.generation == initial_generation && !strcmp(fallback, payloads[0]));
         free(fallback);
     }
+    // Both banks still have plausible headers, but the load menu must reject them.
+    damage_checkpoint(5,initial_generation);
+    assert(save_info(5,&header) && !save_loadable(5));
 }
 
 static void write_legacy(const char *path,unsigned generation,time_t modified) {
     const char payload[]="legacy data";
-    SaveHeader header={.tag="MPS1",.stage="p1_l1-1",.room="p5",.generation=generation,
+    SaveHeader header={.tag={'M','P','S','1'},.stage="p1_l1-1",.room="p5",.generation=generation,
                        .signature=42,.bytes=sizeof payload,.crc=save_hash(payload,sizeof payload)};
     FILE *f=fopen(path,"wb");
     assert(f && fwrite(&header,sizeof header,1,f)==1 && fwrite(payload,sizeof payload,1,f)==1 && fclose(f)==0);
@@ -78,6 +84,7 @@ static void verify_latest_checkpoint(void) {
 
     assert(save_write(SAVE_TRAINING,"tutorial","startroom",42,data,sizeof data));
     assert(save_write(SAVE_BONUS,"end_combat","startroom",42,data,sizeof data));
+    assert(save_loadable(SAVE_TRAINING) && save_loadable(SAVE_BONUS));
     assert(save_latest(0)==3 && save_latest(SAVE_TRAINING)==SAVE_TRAINING && save_latest(SAVE_BONUS)==SAVE_BONUS);
     assert(save_write(2,"tutorial","startroom",42,data,sizeof data));
     assert(save_latest(0)==3 && save_latest(SAVE_TRAINING)==2);

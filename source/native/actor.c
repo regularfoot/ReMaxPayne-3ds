@@ -804,7 +804,10 @@ Point actor_hand_muzzle(const Player *p,const Animation *a,bool left) {
 Point actor_muzzle(const Player *p,const Animation *a){return actor_hand_muzzle(p,a,false);}
 static ActorLight illumination[CAST_SLOTS+1];
 void actor_set_light(unsigned slot,ActorLight light){illumination[slot]=light;}
-static unsigned channel(float ambient,float diffuse,float shade){return (unsigned)fminf(255,.5f*(ambient+diffuse*shade));}
+static inline unsigned channel(float ambient,float diffuse,float shade){
+    float level=.5f*(ambient+diffuse*shade);
+    return (unsigned)(level<255.f?level:255.f);
+}
 void actor_prepare(const Animation *a,float pitch,unsigned instance,bool embedded_weapon,u64 now) {
     Instance *cast=instance && instance<=active_cast?cast_instances+instance-1:NULL;
     Rig *r=cast?cast->rig:instance?&enemy_rig:&max_rig;
@@ -862,7 +865,9 @@ void actor_prepare(const Animation *a,float pitch,unsigned instance,bool embedde
             for(unsigned j=0;j<v->count;j++){
                 Point d=incoming[v->joint[j]];dot+=v->weight[j]*(n.x*d.x+n.y*d.y+n.z*d.z);
             }
-            float shade=fminf(1,fmaxf(0,(dot+.2f)/1.2f));
+            // Keep the same saturation while avoiding libm calls for each skin point.
+            float shade=(dot+.2f)/1.2f;
+            shade=shade>0?(shade<1?shade:1):0;
             r->colors[i]=0xff000000 | channel(light.ambient.x,light.diffuse.x,shade) |
                 (channel(light.ambient.y,light.diffuse.y,shade)<<8) | (channel(light.ambient.z,light.diffuse.z,shade)<<16);
         }
@@ -916,9 +921,7 @@ void actor_draw(const Animation *a,unsigned instance,bool unarmed,const C3D_Mtx 
             bool alpha=selected[i]->fmt==GPU_RGBA4;
             if(alpha && r->counts[i]){
                 if(transform){
-                    const DrawVertex *vertices=cast?cast->vertices:r->buffer[slot];
-                    Point center=vertices[r->indices[first]].pos;
-                    alpha_skin(transform,center,portal,binding,r->indices+first,r->counts[i],selected[i],tint,C3D_GetTexEnv(0)->color);
+                    alpha_skin(transform,portal,binding,r->indices+first,r->counts[i],selected[i],tint,C3D_GetTexEnv(0)->color);
                 }else soft|=1u<<i;
                 C3D_AlphaTest(true,GPU_EQUAL,255);
             }

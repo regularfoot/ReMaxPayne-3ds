@@ -17,6 +17,6 @@ typedef struct {bool consumed,changed;int selected;} WeaponChoice;
 extern const int touch_weapon_order[16];
 TouchRect touch_weapon_rect(unsigned slot);
 WeaponChoice touch_weapon_update(WeaponPicker *picker,bool pressed,int x,int y,bool enabled,uint32_t owned,int current);
-float touch_look_angle(float stick,int pixels,float seconds,unsigned setting,bool vertical);
+float touch_look_angle(float stick,int pixels,float seconds,unsigned stick_percent,unsigned touch_percent,bool vertical);
 float cstick_axis(int value,unsigned deadzone_setting);
 #endif

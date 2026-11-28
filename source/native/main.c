@@ -119,11 +119,19 @@ static const char *encounter_name(const Mission *m) {
     return m->practice_round?"Practice":m->rifle?"Rifle":"Street";
 }
 
-typedef struct {const Player *player;const Animation *animation;const Effects *effects;const Mission *mission;Camera entry;PauseCamera orbit;} TutorialPause;
+typedef struct {
+    const Player *player;
+    const Animation *animation;
+    const Effects *effects;
+    const Mission *mission;
+    Camera entry;
+    PauseCamera orbit;
+    unsigned zoom;
+} TutorialPause;
 static void tutorial_pause_frame(float dt,void *context){
     TutorialPause *pause=context;
     if(dt>=0)scene_pause_step(&pause->orbit,dt,scene_trace);
-    room_render(pause->player,pause->animation,dt<0?&pause->entry:&pause->orbit.view,pause->effects,pause->mission,1);
+    room_render(pause->player,pause->animation,dt<0?&pause->entry:&pause->orbit.view,pause->effects,pause->mission,dt<0?pause->zoom:1);
 }
 static bool play_level(bool house,UiChoice *next) {
     RoomId first=house?HOME:START_ROOM;
@@ -159,7 +167,7 @@ static bool play_level(bool house,UiChoice *next) {
     instructions(&mission,prompt,inventory,BERETTA,false,zoom,stance,p.crouched);
     gyro_prepare(ui_settings.gyro);
     u64 previous=svcGetSystemTick(),sample=previous;
-    unsigned frames=0,total=0;
+    unsigned frames=0,total=0,rendered_zoom=1;
     while (aptMainLoop()) {
         gyro_set_active(ui_settings.gyro && mission.health);
         hidScanInput();
@@ -177,12 +185,12 @@ static bool play_level(bool house,UiChoice *next) {
         if(pick.consumed){touch.origin=TOUCH_WEAPON;gesture=(TouchAction){0};}
         if(pick.selected!=current){animation.weapon=pick.selected==3?SHOTGUN:pick.selected==9?RIFLE:BERETTA;actor_action(&animation,IDLE);zoom=1;}
         if(pick.changed)prompt=NULL;
-        if ((down&KEY_ZR) || (ui_touch_shortcuts() && gesture.pressed==TOUCH_FIRE)) down|=KEY_R;
+        if(ui_touch_shortcuts() && gesture.pressed==TOUCH_FIRE)down|=KEY_R;
         if (down&KEY_START) {
             ui_weapon_close();
             gyro_set_active(false);
             if(sound) for(int ch=0;ch<3;ch++) ndspChnSetPaused(ch,true);
-            TutorialPause pause={.player=&p,.animation=&animation,.effects=&effects,.mission=&mission,.entry=camera};
+            TutorialPause pause={.player=&p,.animation=&animation,.effects=&effects,.mission=&mission,.entry=camera,.zoom=rendered_zoom};
             scene_pause_begin(&pause.orbit,&camera,&p);
             UiChoice action=ui_pause_menu(false,tutorial_pause_frame,&pause);
             if(action!=UI_RESUME){*next=action;break;}
@@ -222,8 +230,8 @@ static bool play_level(bool house,UiChoice *next) {
         float turn=cstick_axis(look.dx,ui_settings.deadzone)+(!!(held&KEY_DRIGHT)-!!(held&KEY_DLEFT));
         float pitch=cstick_axis(look.dy,ui_settings.deadzone)+(!!(held&KEY_DUP)-!!(held&KEY_DDOWN));
         GyroLook motion=gyro_read(dt,ui_settings.gyro_horizontal,ui_settings.gyro_vertical);
-        float manual_yaw=touch_look_angle(turn,gesture.dx,dt,ui_settings.horizontal,false);
-        float manual_pitch=touch_look_angle(pitch,gesture.dy,dt,ui_settings.vertical,true);
+        float manual_yaw=touch_look_angle(turn,gesture.dx,dt,ui_settings.stick_horizontal,ui_settings.touch_horizontal,false);
+        float manual_pitch=touch_look_angle(pitch,gesture.dy,dt,ui_settings.stick_vertical,ui_settings.touch_vertical,true);
         p.yaw+=(manual_yaw+motion.yaw)/zoom;
         p.pitch=fminf(1.25f,fmaxf(-1.25f,p.pitch+(manual_pitch+motion.pitch)*(ui_settings.inverted?-1.f:1.f)/zoom));
         bool crouch_tap=gesture.pressed==TOUCH_CROUCH;
@@ -424,7 +432,8 @@ static bool play_level(bool house,UiChoice *next) {
             Point phone=room_header()->phone;
             phone_mix(phone.x-p.position.x,phone.z-p.position.z,p.yaw);
         }
-        room_render(&p,&animation,&camera,&effects,&mission,zoom);
+        rendered_zoom=zoom;
+        room_render(&p,&animation,&camera,&effects,&mission,rendered_zoom);
         if (last_stereo!=room_stereo() || !total) {
             last_stereo=room_stereo();
             if (journal) fprintf(journal,"DISPLAY eyes=%u slider=%.2f\n",last_stereo?2:1,(double)osGet3DSliderState());

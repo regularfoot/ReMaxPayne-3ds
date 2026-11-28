@@ -39,7 +39,7 @@ def _overlap(left, right):
     return abs(_signed_area(polygon)) > 1e-7
 
 
-def _opposing_faces(vertices):
+def opposing_faces(vertices):
     lo, hi = vertices.min(axis=1), vertices.max(axis=1)
     # Sweep along the axis that separates the most bounds first.
     sweep = np.argmax(np.ptp(lo, axis=0) / np.maximum((hi - lo).mean(axis=0), PLANE_EPSILON))
@@ -98,7 +98,7 @@ def cull_opposing_faces(batches, textures):
     for chunks in groups.values():
         indices = np.concatenate(chunks)
         if len(indices) > 1:
-            marked[indices[_opposing_faces(positions[indices])]] = True
+            marked[indices[opposing_faces(positions[indices])]] = True
     if not marked.any():
         return batches
     output = []

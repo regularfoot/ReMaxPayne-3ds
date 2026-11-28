@@ -31,10 +31,22 @@ static struct {
 static uint8_t weapon_art[15][24][64];
 static WeaponPicker weapon_picker;
 static bool new_model,full_training;
-enum { GYRO_MIN_PERCENT=25, GYRO_MAX_PERCENT=200, GYRO_STEP_PERCENT=5 };
+enum { MIN_PERCENT=25, GYRO_MAX_PERCENT=200, AIM_MAX_PERCENT=250, STEP_PERCENT=5 };
 UiSettings ui_settings={.horizontal=2,.vertical=2,.deadzone=1,.volume=4,.tips=1,.music=3,
-                        .gyro_horizontal=100,.gyro_vertical=100,.reticle=1};
-static const char *config="sdmc:/3ds/maxpayne/settings.bin";
+                        .gyro_horizontal=100,.gyro_vertical=100,.reticle=1,
+                        .stick_horizontal=100,.stick_vertical=100,.touch_horizontal=100,.touch_vertical=100};
+static const char *legacy_config="sdmc:/3ds/maxpayne/settings.bin";
+static const char *config="sdmc:/3ds/maxpayne/settings-v2.bin";
+static const char *config_temp="sdmc:/3ds/maxpayne/settings-v2.tmp";
+static bool settings_dirty;
+
+static const unsigned texture_sizes[]={0,128,256,512,1024};
+
+unsigned ui_texture_limit(bool sky){
+    if(!new_model)return sky && ui_settings.sky_textures==2?256:128;
+    unsigned option=sky?ui_settings.sky_textures:ui_settings.world_textures;
+    return option?texture_sizes[option]:512;
+}
 
 static void box(int x,int y,int w,int h,uint16_t color) {
     int x1=x+w<W?x+w:W,y1=y+h<H?y+h:H;
@@ -144,8 +156,49 @@ static bool load_top(const char *name) {
     return ok;
 }
 bool ui_title(void) {return load_top("romfs:/menu.565");}
-static bool valid_gyro_percent(unsigned percent) {
-    return percent>=GYRO_MIN_PERCENT && percent<=GYRO_MAX_PERCENT && percent%GYRO_STEP_PERCENT==0;
+static bool valid_percent(unsigned percent,unsigned max){
+    return percent>=MIN_PERCENT && percent<=max && percent%STEP_PERCENT==0;
+}
+static bool valid_settings(const UiSettings *s){
+    return valid_percent(s->gyro_horizontal,GYRO_MAX_PERCENT) && valid_percent(s->gyro_vertical,GYRO_MAX_PERCENT) &&
+        valid_percent(s->stick_horizontal,AIM_MAX_PERCENT) && valid_percent(s->stick_vertical,AIM_MAX_PERCENT) &&
+        valid_percent(s->touch_horizontal,AIM_MAX_PERCENT) && valid_percent(s->touch_vertical,AIM_MAX_PERCENT) &&
+        s->world_textures<=3 && s->sky_textures<=4 &&
+        s->gyro<2 && s->scheme<4 && s->reticle<3 && s->autoaim<2 && s->lock<2 && s->autoswitch<2 &&
+        s->slow_assist<2 && s->recenter<2 && s->quickaim<2 && s->horizontal<=4 && s->vertical<=4 && s->deadzone<=4 &&
+        s->volume<=4 && s->inverted<=1 && s->tips<=1 && s->music<=4;
+}
+static bool read_current_settings(const char *path){
+    FILE *file=fopen(path,"rb");
+    if(!file)return false;
+    UiSettings s;char tag[4];
+    bool ok=fread(tag,1,sizeof tag,file)==sizeof tag && !memcmp(tag,"MPS2",4) &&
+            fread(&s,1,sizeof s,file)==sizeof s && fgetc(file)==EOF && valid_settings(&s);
+    fclose(file);
+    if(ok)ui_settings=s;
+    return ok;
+}
+static void read_settings(void){
+    if(read_current_settings(config))return;
+    // FAT may have removed the previous file before an interrupted rename.
+    if(read_current_settings(config_temp)){rename(config_temp,config);return;}
+    FILE *file=fopen(legacy_config,"rb");
+    if(!file)return;
+    UiSettings s=ui_settings;
+    size_t legacy_size=offsetof(UiSettings,stick_horizontal);
+    size_t bytes=fread(&s,1,legacy_size,file);
+    bool shared_sensitivity=bytes==offsetof(UiSettings,gyro_horizontal);
+    if(shared_sensitivity){
+        s.gyro_horizontal=50+25*s.horizontal;
+        s.gyro_vertical=50+25*s.vertical;
+    }
+    s.stick_horizontal=s.touch_horizontal=50+25*s.horizontal;
+    s.stick_vertical=s.touch_vertical=50+25*s.vertical;
+    int format=fgetc(file);
+    if(format==EOF && !s.reticle)s.reticle=1;
+    if((bytes==offsetof(UiSettings,scheme) || bytes==offsetof(UiSettings,gyro) || shared_sensitivity || bytes==legacy_size) &&
+       (format==EOF || (bytes==legacy_size && format==1 && fgetc(file)==EOF)) && valid_settings(&s))ui_settings=s;
+    fclose(file);
 }
 bool ui_init(uint16_t *fb,bool enhanced) {
     (void)fb;new_model=enhanced;
@@ -172,24 +225,7 @@ bool ui_init(uint16_t *fb,bool enhanced) {
        menu.count==4 && menu.width==W && menu.height==H &&
        fread(&menu_art,sizeof menu_art,1,file)==1 && fgetc(file)==EOF;
     fclose(file);
-    file=fopen(config,"rb");
-    if (file) {
-        UiSettings s=ui_settings;size_t bytes=fread(&s,1,sizeof s,file);
-        bool shared_sensitivity=bytes==offsetof(UiSettings,gyro_horizontal);
-        if (shared_sensitivity) {
-            // The first gyro release used the stick's 50/75/100/125/150% speeds.
-            s.gyro_horizontal=50+25*s.horizontal;
-            s.gyro_vertical=50+25*s.vertical;
-        }
-        int format=fgetc(file);
-        if(format==EOF && !s.reticle)s.reticle=1;
-        if ((bytes==offsetof(UiSettings,scheme) || bytes==offsetof(UiSettings,gyro) || shared_sensitivity || bytes==sizeof s) &&
-            (format==EOF || (bytes==sizeof s && format==1 && fgetc(file)==EOF)) &&
-            valid_gyro_percent(s.gyro_horizontal) && valid_gyro_percent(s.gyro_vertical) &&
-            s.gyro<2 && s.scheme<4 && s.reticle<3 && s.autoaim<2 && s.lock<2 && s.autoswitch<2 && s.slow_assist<2 && s.recenter<2 && s.quickaim<2 && s.horizontal<=4 && s.vertical<=4 && s.deadzone<=4 &&
-            s.volume<=4 && s.inverted<=1 && s.tips<=1 && s.music<=4) ui_settings=s;
-        fclose(file);
-    }
+    read_settings();
     FILE *map=campaign_file("tutorial.mpc");full_training=map!=NULL;if(map)fclose(map);
     return ok;
 }
@@ -223,22 +259,27 @@ static void tile(int x,int y,int w,int h,const char *name,bool on,bool current,i
     if (icon>=0) glyph_icon(x+10,y+(h-16)/2,icon,current?WHITE:on?MUTED:GREY);
     label(x+(icon>=0?34:12),y+(h-26)/2,1,name,color,x+w-3);
 }
-enum Page { ROOT, DIFFICULTY, OPTIONS, SETS, CONTROLS, MOVE, COMBAT, WEAPONS, GENERAL, SOUND, CREDITS, QUIT, LOAD_SLOTS, SAVE_SLOTS, TRAIN_MENU, GYRO_MENU };
+enum Page { ROOT, DIFFICULTY, OPTIONS, SETS, CONTROLS, MOVE, COMBAT, WEAPONS, GENERAL, SOUND, CREDITS, QUIT, LOAD_SLOTS, SAVE_SLOTS, TRAIN_MENU, GYRO_MENU, AIM_MENU, GRAPHICS };
 enum Action { PRESET,RESUME,TRAIN,NEWGAME,LEAVE,BACK,SUB,CHANGE,INFO,BONUS,AUTHORED,ANIMATIONS };
 typedef struct {const char *name;int action,argument;} Entry;
 typedef struct {const char *name;const Entry *list;int count;enum Page parent;} PageDef;
-enum Setting { HORIZ,VERT,DEAD,VOLUME,MUSIC,INVERT,TIPS,RETICLE,AUTOAIM,LOCK,AUTOSWITCH,SLOW_ASSIST,RECENTER,QUICKAIM,GYRO_AIM,GYRO_HORIZONTAL,GYRO_VERTICAL };
+enum Setting { DEAD,VOLUME,MUSIC,INVERT,TIPS,RETICLE,AUTOAIM,LOCK,AUTOSWITCH,SLOW_ASSIST,RECENTER,QUICKAIM,GYRO_AIM,GYRO_HORIZONTAL,GYRO_VERTICAL,STICK_X,STICK_Y,TOUCH_X,TOUCH_Y,WORLD_TEXTURES,SKY_TEXTURES };
 static const Entry root[]={
     {MP_TEXT("Продолжить","Continue"),RESUME,0},{MP_TEXT("Обучение","Tutorial"),SUB,TRAIN_MENU},{MP_TEXT("Новая игра","New Game"),SUB,DIFFICULTY},{MP_TEXT("Загрузка","Load Game"),SUB,LOAD_SLOTS},
     {MP_TEXT("Сохранение","Save Game"),SUB,SAVE_SLOTS},{MP_TEXT("Настройки","Options"),SUB,OPTIONS},{MP_TEXT("Авторы","Credits"),SUB,CREDITS},{MP_TEXT("Выход","Exit"),SUB,QUIT}};
 static const Entry training[]={{MP_TEXT("Обучение","Tutorial"),AUTHORED,0},{MP_TEXT("Тренировочные раунды","Practice Rounds"),TRAIN,0}};
 static const Entry difficulty[]={{MP_TEXT("Беглец","Fugitive"),NEWGAME,FUGITIVE},{MP_TEXT("Крутой коп","Hard-Boiled"),NEWGAME,HARD_BOILED},{MP_TEXT("Смерть по прибытии","Dead on Arrival"),NEWGAME,DEAD_ON_ARRIVAL},{MP_TEXT("Минута Нью-Йорка","New York Minute"),NEWGAME,NEW_YORK_MINUTE},{MP_TEXT("Последняя схватка","Last Challenge"),BONUS,0}};
-static const Entry options[]={{MP_TEXT("Схемы управления","Control Presets"),SUB,SETS},{MP_TEXT("Управление","Controls"),SUB,CONTROLS},{MP_TEXT("Игра","Gameplay"),SUB,GENERAL},{MP_TEXT("Звук","Sound"),SUB,SOUND},{MP_TEXT("Анимации персонажа","Character Animations"),ANIMATIONS,0}};
+static const Entry options[]={{MP_TEXT("Схемы управления","Control Presets"),SUB,SETS},{MP_TEXT("Управление","Controls"),SUB,CONTROLS},{MP_TEXT("Графика","Graphics"),SUB,GRAPHICS},{MP_TEXT("Игра","Gameplay"),SUB,GENERAL},{MP_TEXT("Звук","Sound"),SUB,SOUND},{MP_TEXT("Анимации персонажа","Character Animations"),ANIMATIONS,0}};
 static const Entry sets[]={{MP_TEXT("1   Стандарт","1   Standard"),PRESET,0},{MP_TEXT("2   Левша","2   Left-Handed"),PRESET,1},{MP_TEXT("3   Кнопки X / Y","3   Swap X / Y"),PRESET,2},{MP_TEXT("4   Левша и X / Y","4   Left-Handed + X / Y"),PRESET,3}};
-static const Entry controls[]={{MP_TEXT("Движение","Movement"),SUB,MOVE},{MP_TEXT("Бой и камера","Combat and Camera"),SUB,COMBAT},{MP_TEXT("Оружие","Weapons"),SUB,WEAPONS},{MP_TEXT("Гироскоп","Gyroscope"),SUB,GYRO_MENU}};
+static const Entry controls[]={{MP_TEXT("Движение","Movement"),SUB,MOVE},{MP_TEXT("Бой и камера","Combat and Camera"),SUB,COMBAT},{MP_TEXT("Оружие","Weapons"),SUB,WEAPONS},{MP_TEXT("Гироскоп","Gyroscope"),SUB,GYRO_MENU},{MP_TEXT("Чувствительность","Aim Sensitivity"),SUB,AIM_MENU}};
 static const Entry gyro_options[]={{MP_TEXT("Управление наклоном","Tilt to Aim"),CHANGE,GYRO_AIM},{MP_TEXT("По горизонтали","Horizontal"),CHANGE,GYRO_HORIZONTAL},{MP_TEXT("По вертикали","Vertical"),CHANGE,GYRO_VERTICAL}};
+static const Entry aim_options[]={
+    {MP_TEXT("Стик по горизонтали","Stick Horizontal"),CHANGE,STICK_X},{MP_TEXT("Стик по вертикали","Stick Vertical"),CHANGE,STICK_Y},
+    {MP_TEXT("Экран по горизонтали","Touch Horizontal"),CHANGE,TOUCH_X},{MP_TEXT("Экран по вертикали","Touch Vertical"),CHANGE,TOUCH_Y}};
+static const Entry graphics[]={
+    {MP_TEXT("Текстуры окружения","World Textures"),CHANGE,WORLD_TEXTURES},{MP_TEXT("Текстуры неба","Sky Textures"),CHANGE,SKY_TEXTURES}};
 static const Entry movement[]={{MP_TEXT("Движение   /   Circle Pad","Move   /   Circle Pad"),INFO,0},{MP_TEXT("Присесть","Crouch"),INFO,1},{MP_TEXT("Прыжок   /   B","Jump   /   B"),INFO,0},{MP_TEXT("Действие   /   A","Interact   /   A"),INFO,0},{"Bullet Time   /   ZL",INFO,2},{MP_TEXT("Прыжок с уклонением","Shoot-Dodge"),INFO,3}};
-static const Entry combat[]={{MP_TEXT("Выстрел   /   R","Fire   /   R"),INFO,0},{MP_TEXT("Перезарядка   /   X","Reload   /   X"),INFO,0},{MP_TEXT("Болеутоляющее   /   SELECT","Painkiller   /   SELECT"),INFO,0},{MP_TEXT("Быстрый прицел","Quick Aim"),CHANGE,QUICKAIM},{MP_TEXT("Камера по горизонтали","Horizontal Camera"),CHANGE,HORIZ},{MP_TEXT("Камера по вертикали","Vertical Camera"),CHANGE,VERT},{MP_TEXT("Инверсия камеры","Invert Camera"),CHANGE,INVERT}};
+static const Entry combat[]={{MP_TEXT("Выстрел   /   R","Fire   /   R"),INFO,0},{MP_TEXT("Перезарядка   /   X","Reload   /   X"),INFO,0},{MP_TEXT("Болеутоляющее   /   SELECT","Painkiller   /   SELECT"),INFO,0},{MP_TEXT("Быстрый прицел","Quick Aim"),CHANGE,QUICKAIM},{MP_TEXT("Инверсия камеры","Invert Camera"),CHANGE,INVERT}};
 static const Entry weapons[]={{MP_TEXT("Иконка оружия / Y","Weapon Icon / Y"),INFO,0},{MP_TEXT("Холодное оружие","Melee Weapons"),INFO,0},{MP_TEXT("Пистолеты","Pistols"),INFO,0},{MP_TEXT("Дробовики","Shotguns"),INFO,0},{MP_TEXT("Автоматы","Automatic Weapons"),INFO,0},{MP_TEXT("Метательное оружие","Throwables"),INFO,0},{MP_TEXT("Снайперская винтовка","Sniper Rifle"),INFO,4}};
 static const Entry general[]={{MP_TEXT("Настройка прицела","Reticle"),CHANGE,RETICLE},{MP_TEXT("Мёртвая зона стика","Stick Dead Zone"),CHANGE,DEAD},{MP_TEXT("Автоприцел","Auto Aim"),CHANGE,AUTOAIM},{MP_TEXT("Захват цели","Target Lock"),CHANGE,LOCK},{MP_TEXT("Автосмена оружия","Auto Weapon Switch"),CHANGE,AUTOSWITCH},{MP_TEXT("Подсказки","Hints"),CHANGE,TIPS},{MP_TEXT("Помощь Bullet Time","Bullet Time Assist"),CHANGE,SLOW_ASSIST},{MP_TEXT("Возврат камеры","Recenter Camera"),CHANGE,RECENTER}};
 static const Entry sound[]={{MP_TEXT("Громкость музыки","Music Volume"),CHANGE,MUSIC},{MP_TEXT("Громкость звука","Sound Volume"),CHANGE,VOLUME}};
@@ -248,7 +289,8 @@ static const PageDef pages[]={PAGE(MP_TEXT("Главное меню","Main Menu"
     PAGE(MP_TEXT("Схемы управления","Control Presets"),sets,OPTIONS),PAGE(MP_TEXT("Управление","Controls"),controls,OPTIONS),PAGE(MP_TEXT("Движение","Movement"),movement,CONTROLS),
     PAGE(MP_TEXT("Бой и камера","Combat and Camera"),combat,CONTROLS),PAGE(MP_TEXT("Оружие","Weapons"),weapons,CONTROLS),PAGE(MP_TEXT("Игра","Gameplay"),general,OPTIONS),
     PAGE(MP_TEXT("Звук","Sound"),sound,OPTIONS),{MP_TEXT("Авторы","Credits"),NULL,0,ROOT},PAGE(MP_TEXT("Выход","Exit"),quit,ROOT),{MP_TEXT("Загрузка","Load Game"),NULL,SAVE_COUNT,ROOT},{MP_TEXT("Сохранение","Save Game"),NULL,SAVE_COUNT-2,ROOT},PAGE(MP_TEXT("Обучение","Tutorial"),training,ROOT),
-    PAGE(MP_TEXT("Гироскоп","Gyroscope"),gyro_options,CONTROLS)};
+    PAGE(MP_TEXT("Гироскоп","Gyroscope"),gyro_options,CONTROLS),
+    PAGE(MP_TEXT("Чувствительность","Aim Sensitivity"),aim_options,CONTROLS),PAGE(MP_TEXT("Графика","Graphics"),graphics,OPTIONS)};
 void ui_animation_card(const char *name,unsigned clip,unsigned total){
     char caption[64];heading(MP_TEXT("Анимации персонажа","Character Animations"));snprintf(caption,sizeof caption,"%u / %u",clip,total);
     label(12,57,0,caption,MUTED,310);paragraph(12,83,0,name,3,WHITE);
@@ -256,30 +298,53 @@ void ui_animation_card(const char *name,unsigned clip,unsigned total){
     footer(MP_TEXT("L / R   Через 10     •     B   Назад","L / R   Skip 10     /     B   Back"));flush();
 }
 static uint8_t *setting(int id) {
-    switch(id){case HORIZ:return &ui_settings.horizontal;case VERT:return &ui_settings.vertical;
-    case DEAD:return &ui_settings.deadzone;case VOLUME:return &ui_settings.volume;case MUSIC:return &ui_settings.music;case RETICLE:return &ui_settings.reticle;
+    switch(id){case DEAD:return &ui_settings.deadzone;case VOLUME:return &ui_settings.volume;case MUSIC:return &ui_settings.music;case RETICLE:return &ui_settings.reticle;
     case AUTOAIM:return &ui_settings.autoaim;case LOCK:return &ui_settings.lock;case AUTOSWITCH:return &ui_settings.autoswitch;
     case SLOW_ASSIST:return &ui_settings.slow_assist;case RECENTER:return &ui_settings.recenter;case QUICKAIM:return &ui_settings.quickaim;case INVERT:return &ui_settings.inverted;
     case GYRO_AIM:return &ui_settings.gyro;
     case GYRO_HORIZONTAL:return &ui_settings.gyro_horizontal;
     case GYRO_VERTICAL:return &ui_settings.gyro_vertical;
+    case STICK_X:return &ui_settings.stick_horizontal;
+    case STICK_Y:return &ui_settings.stick_vertical;
+    case TOUCH_X:return &ui_settings.touch_horizontal;
+    case TOUCH_Y:return &ui_settings.touch_vertical;
+    case WORLD_TEXTURES:return &ui_settings.world_textures;
+    case SKY_TEXTURES:return &ui_settings.sky_textures;
     default:return &ui_settings.tips;}
 }
-static void write_settings(void) {
-    FILE *f=fopen(config,"wb");if(f){fwrite(&ui_settings,sizeof ui_settings,1,f);fputc(1,f);fclose(f);}
+static void write_settings(void){
+    if(!settings_dirty)return;
+    FILE *file=fopen(config_temp,"wb");
+    if(!file)return;
+    bool ok=fwrite("MPS2",1,4,file)==4 && fwrite(&ui_settings,sizeof ui_settings,1,file)==1;
+    if(fclose(file))ok=false;
+    if(ok && !rename(config_temp,config))settings_dirty=false;
 }
-static bool gyro_sensitivity(int id) { return id==GYRO_HORIZONTAL || id==GYRO_VERTICAL; }
-static void change(int id,int step) {
+static unsigned percent_max(int id){
+    if(id==GYRO_HORIZONTAL || id==GYRO_VERTICAL)return GYRO_MAX_PERCENT;
+    if(id>=STICK_X && id<=TOUCH_Y)return AIM_MAX_PERCENT;
+    return 0;
+}
+static bool change(int id,int step){
     uint8_t *value=setting(id);
-    if(gyro_sensitivity(id)) {
-        int next=*value+step*GYRO_STEP_PERCENT;
-        if(next<GYRO_MIN_PERCENT || next>GYRO_MAX_PERCENT) return;
-        *value=next;
-    } else {
-        int limit=id==RETICLE?3:id>=INVERT?2:5;
-        *value=(*value+step+limit)%limit;
+    unsigned maximum=percent_max(id);
+    int next;
+    if(maximum){
+        next=*value+step*STEP_PERCENT;
+        if(next<MIN_PERCENT || next>(int)maximum)return false;
+    }else{
+        int limit;
+        if(id==WORLD_TEXTURES)limit=new_model?4:1;
+        else if(id==SKY_TEXTURES)limit=new_model?5:3;
+        else if(id==RETICLE)limit=3;
+        else limit=(id>=INVERT)?2:5;
+        if(limit==1)return false;
+        int current=*value<limit?*value:0;
+        next=(current+step+limit)%limit;
     }
-    write_settings();
+    *value=next;
+    settings_dirty=true;
+    return true;
 }
 static uint32_t swap_keys(uint32_t keys,uint32_t a,uint32_t b) {
     return (keys&~(a|b))|((keys&a)?b:0)|((keys&b)?a:0);
@@ -289,23 +354,41 @@ bool ui_touch_slow(void){return !new_model;}
 uint32_t ui_game_keys(uint32_t keys) {
     if(ui_settings.scheme&1)keys=swap_keys(keys,KEY_L,KEY_R);
     if(ui_settings.scheme&2)keys=swap_keys(keys,KEY_X,KEY_Y);
+    if(keys&KEY_ZR)keys|=KEY_R;
     return keys;
 }
 unsigned ui_save_slot;
-static SaveHeader slot_info[SAVE_COUNT];
+static SaveHeader slot_info[SAVE_BONUS+1];
 static unsigned modes;
-static bool slot_valid[SAVE_COUNT],any_save,allow_save,cleared;
+static bool slot_valid[SAVE_BONUS+1],any_save,allow_save,cleared;
 static void refresh_slots(void) {
     any_save=false;cleared=save_completed();modes=save_unlocked_modes();
-    for(unsigned i=0;i<SAVE_COUNT;i++) {
+    for(unsigned i=0;i<=SAVE_BONUS;i++) {
         slot_valid[i]=save_info(i,slot_info+i);any_save|=slot_valid[i];
     }
+}
+static int menu_entries(enum Page page){
+    if(page==LOAD_SLOTS)return SAVE_COUNT+slot_valid[SAVE_TRAINING]+slot_valid[SAVE_BONUS];
+    return pages[page].count;
+}
+static unsigned menu_slot(enum Page page,int row){
+    if(page==SAVE_SLOTS)return row+2;
+    if(row==SAVE_TRAINING && !slot_valid[SAVE_TRAINING])return SAVE_BONUS;
+    return row;
+}
+static bool select_save(unsigned slot){
+    // Validate only the requested save. Checking every payload would stall the pause menu.
+    if(!save_loadable(slot)){
+        ui_notice(MP_TEXT("Ошибка чтения сохранения","Could not read save"));
+        return false;
+    }
+    ui_save_slot=slot;return true;
 }
 static const char *binding_label(const Entry *e) {
     if(!strcmp(e->name,"Bullet Time   /   ZL") && !new_model)return MP_TEXT("Bullet Time   /   экран","Bullet Time   /   Touch Screen");
     if(!strcmp(e->name,MP_TEXT("Выстрел   /   R","Fire   /   R")) && (ui_settings.scheme&1))return MP_TEXT("Выстрел   /   L","Fire   /   L");
     if(!strcmp(e->name,MP_TEXT("Перезарядка   /   X","Reload   /   X")) && (ui_settings.scheme&2))return MP_TEXT("Перезарядка   /   Y","Reload   /   Y");
-    if(!strcmp(e->name,MP_TEXT("Выбор оружия   /   Y","Select Weapon   /   Y")) && (ui_settings.scheme&2))return MP_TEXT("Выбор оружия   /   X","Select Weapon   /   X");
+    if(!strcmp(e->name,MP_TEXT("Иконка оружия / Y","Weapon Icon / Y")) && (ui_settings.scheme&2))return MP_TEXT("Иконка оружия / X","Weapon Icon / X");
     return e->name;
 }
 static void control_help(enum Page page,const Entry *entry) {
@@ -326,18 +409,18 @@ static void control_help(enum Page page,const Entry *entry) {
 }
 static bool enabled(const Entry *e,bool paused) {return (e->action!=ANIMATIONS || (paused && pose_bank_count())) && (e->action!=NEWGAME || (modes&(1u<<e->argument))) && (e->action!=RESUME || paused || slot_valid[0]) && (e->action!=BONUS || cleared) &&
         (e->action!=SUB || e->argument!=LOAD_SLOTS || any_save) && (e->action!=SUB || e->argument!=SAVE_SLOTS || allow_save);}
-enum { GYRO_MINUS_X=174, GYRO_PLUS_X=257, GYRO_BUTTON_WIDTH=38 };
-static void draw_gyro_percent(int y,unsigned value) {
+enum { MINUS_X=174, PLUS_X=257, ADJUST_BUTTON_WIDTH=38 };
+static void draw_percent(int y,unsigned value,unsigned maximum) {
     char text[8];snprintf(text,sizeof text,"%u%%",value);
-    box(GYRO_MINUS_X,y+2,GYRO_BUTTON_WIDTH,29,PANEL);
-    box(GYRO_PLUS_X,y+2,GYRO_BUTTON_WIDTH,29,PANEL);
-    uint16_t minus=value==GYRO_MIN_PERCENT?GREY:WHITE,plus=value==GYRO_MAX_PERCENT?GREY:WHITE;
-    box(GYRO_MINUS_X+13,y+16,12,2,minus);
-    box(GYRO_PLUS_X+13,y+16,12,2,plus);box(GYRO_PLUS_X+18,y+11,2,12,plus);
-    label(GYRO_MINUS_X+GYRO_BUTTON_WIDTH+3,y+7,0,text,PAPER,GYRO_PLUS_X);
+    box(MINUS_X,y+2,ADJUST_BUTTON_WIDTH,29,PANEL);
+    box(PLUS_X,y+2,ADJUST_BUTTON_WIDTH,29,PANEL);
+    uint16_t minus=value==MIN_PERCENT?GREY:WHITE,plus=value==maximum?GREY:WHITE;
+    box(MINUS_X+13,y+16,12,2,minus);
+    box(PLUS_X+13,y+16,12,2,plus);box(PLUS_X+18,y+11,2,12,plus);
+    label(MINUS_X+ADJUST_BUTTON_WIDTH+3,y+7,0,text,PAPER,PLUS_X);
 }
 enum { ROOT_Y=8, ROOT_PITCH=25, MENU_Y=48, MENU_PITCH=39, SETTING_PITCH=53 };
-static bool settings_page(enum Page page){return page==COMBAT || page==GENERAL || page==SOUND || page==GYRO_MENU || page==LOAD_SLOTS || page==SAVE_SLOTS;}
+static bool settings_page(enum Page page){return page==COMBAT || page==GENERAL || page==SOUND || page==GYRO_MENU || page==AIM_MENU || page==GRAPHICS || page==LOAD_SLOTS || page==SAVE_SLOTS;}
 static int menu_rows(enum Page page){return page==ROOT?8:settings_page(page)?3:4;}
 static int menu_pitch(enum Page page){return page==ROOT?ROOT_PITCH:settings_page(page)?SETTING_PITCH:MENU_PITCH;}
 static void menu_sprite(const uint16_t *pixels,int width,int height,int x,int y){
@@ -351,6 +434,7 @@ static void menu_line(int x,int y,int size,const char *name,bool on,bool selecte
 }
 static void draw_menu(enum Page page,int selected,int top,bool paused,int card) {
     const PageDef *p=&pages[page];
+    int entries=menu_entries(page);
     unsigned background=page==ROOT || page==DIFFICULTY?0:page==LOAD_SLOTS || page==SAVE_SLOTS?2:page==QUIT?3:1;
     memcpy(screen,menu_art.backgrounds[background],W*H*2);
     if(page!=ROOT)label(17,12,2,p->name,WHITE,310);
@@ -358,13 +442,15 @@ static void draw_menu(enum Page page,int selected,int top,bool paused,int card) 
         label(18,78,1,"Remedy Entertainment",WHITE,311);
         label(18,106,0,"2001",MUTED,311);
         menu_line(18,170,0,card?MP_TEXT("Предыдущая страница","Previous Page"):MP_TEXT("Следующая страница","Next Page"),true,true,310);
-    } else for(int k=0;k<menu_rows(page) && k+top<p->count;k++) {
+    } else for(int k=0;k<menu_rows(page) && k+top<entries;k++) {
         int i=k+top,y=(page==ROOT?ROOT_Y:MENU_Y)+menu_pitch(page)*k;
         if(page==LOAD_SLOTS || page==SAVE_SLOTS) {
-            unsigned slot=i+(page==SAVE_SLOTS?2:0);
+            unsigned slot=menu_slot(page,i);
             char prefix[40];
             if(!slot)strcpy(prefix,MP_TEXT("Автосохранение","Autosave"));
             else if(slot==1)strcpy(prefix,MP_TEXT("Быстрое сохранение","Quicksave"));
+            else if(slot==SAVE_TRAINING)strcpy(prefix,MP_TEXT("Обучение","Tutorial Autosave"));
+            else if(slot==SAVE_BONUS)strcpy(prefix,MP_TEXT("Последняя схватка","Last Challenge Autosave"));
             else snprintf(prefix,sizeof prefix,MP_TEXT("Ячейка %u","Slot %u"),slot-1);
             menu_line(32,y,1,prefix,page==SAVE_SLOTS || slot_valid[slot],i==selected,296);
             label(33,y+24,0,slot_valid[slot]?slot_info[slot].room:MP_TEXT("Пусто","Empty"),MUTED,296);continue;
@@ -376,7 +462,17 @@ static void draw_menu(enum Page page,int selected,int top,bool paused,int card) 
         if(e->action==CHANGE) {
             y+=23;
             unsigned value=*setting(e->argument);
-            if(gyro_sensitivity(e->argument))draw_gyro_percent(y,value);
+            unsigned maximum=percent_max(e->argument);
+            if(maximum)draw_percent(y,value,maximum);
+            else if(page==GRAPHICS){
+                bool sky=e->argument==SKY_TEXTURES;
+                bool automatic=!value || (!new_model && sky && value>2);
+                char resolution[48];
+                if(!new_model && !sky)snprintf(resolution,sizeof resolution,"128");
+                else if(automatic)snprintf(resolution,sizeof resolution,MP_TEXT("< Авто (%u) >","< Auto (%u) >"),ui_texture_limit(sky));
+                else snprintf(resolution,sizeof resolution,"< %u >",ui_texture_limit(sky));
+                label(177,y,0,resolution,PAPER,301);
+            }
             else if(e->argument==RETICLE){const char *styles[]={MP_TEXT("Крест","Crosshair"),MP_TEXT("Точка","Dot"),MP_TEXT("Круг","Circle")};label(227,y,0,styles[value],PAPER,303);}
             else if(e->argument>=INVERT)menu_sprite(menu_art.toggles[value!=0],18,18,275,y+2);
             else{
@@ -385,11 +481,12 @@ static void draw_menu(enum Page page,int selected,int top,bool paused,int card) 
             }
         }
     }
-    if(page!=ROOT && p->count>menu_rows(page)){
+    if(page!=ROOT && entries>menu_rows(page)){
         if(top)label(303,58,1,"^",PAPER,319);
-        if(top+menu_rows(page)<p->count)label(303,185,1,"v",PAPER,319);
+        if(top+menu_rows(page)<entries)label(303,185,1,"v",PAPER,319);
     }
-    const char *hint=page==GYRO_MENU?MP_TEXT("Влево / вправо   Изменить     B   Назад","Left / Right   Adjust    B   Back"):page==ROOT?
+    const char *hint=page==GRAPHICS?MP_TEXT("При следующей загрузке уровня","Applies on next level load"):
+        (page==GYRO_MENU || page==AIM_MENU)?MP_TEXT("Влево / вправо   Изменить     B   Назад","Left / Right   Adjust    B   Back"):page==ROOT?
         (paused && allow_save?MP_TEXT("X   Сохранить   /   Y   Загрузить","X   Quicksave   /   Y   Quickload"):MP_TEXT("A   Выбрать   /   Касание","A   Select   /   Touch")):
         MP_TEXT("B   Назад     /     A   Выбрать","B   Back     /     A   Select");
     label(10,220,0,hint,MUTED,314);flush();
@@ -399,26 +496,47 @@ static UiChoice menu_loop(bool paused,bool can_save,UiPauseFrame redraw,void *co
     enum Page page=ROOT;int positions[sizeof pages/sizeof *pages]={0};positions[ROOT]=paused?0:1;
     int top=0,card=0;bool dirty=true;
     static unsigned attract;
-    u64 last_input=svcGetSystemTick(),previous=last_input;
+    u64 last_input=svcGetSystemTick(),last_frame=last_input-SYSCLOCK_ARM11/15;
+    u64 repeat_at=0;
+    uint32_t repeat_key=0;
     while(aptMainLoop()) {
         u64 tick=svcGetSystemTick();
-        float dt=fminf(.05f,(tick-previous)/(float)SYSCLOCK_ARM11);previous=tick;
-        if(redraw && page!=CREDITS)redraw(dt,context);
         int *position=&positions[page];
         const PageDef *p=&pages[page];
+        int entries=menu_entries(page);
         if(*position<top) top=*position;
         if(page!=ROOT && *position>=top+menu_rows(page)) top=*position-menu_rows(page)+1;
         if(dirty) {draw_menu(page,*position,top,paused,card);dirty=false;}
         bank_tick();hidScanInput();
         uint32_t down=hidKeysDown();
-        if(hidKeysHeld())last_input=svcGetSystemTick();
+        uint32_t held=hidKeysHeld();
+        if(held)last_input=tick;
+        uint32_t adjust=held&(KEY_DLEFT|KEY_DRIGHT);
+        bool percent_row=(page==GYRO_MENU || page==AIM_MENU) && percent_max(p->list[*position].argument);
+        if(!percent_row || (adjust!=KEY_DLEFT && adjust!=KEY_DRIGHT))repeat_key=0;
+        else if(adjust!=repeat_key || (down&adjust)){
+            repeat_key=adjust;repeat_at=tick+SYSCLOCK_ARM11/4;
+        }else if(!down && tick>=repeat_at){
+            down=repeat_key;repeat_at=tick+SYSCLOCK_ARM11/15;
+        }
         if(!paused && page==ROOT && !down && svcGetSystemTick()-last_input>60ULL*SYSCLOCK_ARM11){
             movie_play(attract++%2?"attract01.mpv":"attract00.mpv");ui_title();dirty=true;last_input=svcGetSystemTick();
         }
-        if(!down) {gspWaitForVBlank();continue;}
+        if(!down){
+            bool adjusting=page==OPTIONS || page==CONTROLS || page==GYRO_MENU || page==AIM_MENU || page==GRAPHICS;
+            if(redraw && page!=CREDITS && (!adjusting || tick-last_frame>=SYSCLOCK_ARM11/15)){
+                redraw(fminf(.075f,(tick-last_frame)/(float)SYSCLOCK_ARM11),context);
+                last_frame=tick;
+            }
+            gspWaitForVBlank();
+            continue;
+        }
         bool accept=down&KEY_A,back=down&KEY_B;
         if(page==ROOT && paused && allow_save && (down&KEY_X)){ui_save_slot=1;return UI_SAVE;}
-        if(page==ROOT && paused && slot_valid[1] && (down&KEY_Y)){ui_save_slot=1;return UI_LOAD;}
+        if(page==ROOT && paused && slot_valid[1] && (down&KEY_Y)){
+            if(select_save(1))return UI_LOAD;
+            dirty=true;continue;
+        }
         if(page==ROOT && !paused && (down&KEY_X)){selected_mode=FUGITIVE;return UI_CAMPAIGN;}
         if(down&KEY_START) {
             if(paused && page==ROOT) return UI_RESUME;
@@ -428,18 +546,19 @@ static UiChoice menu_loop(bool paused,bool can_save,UiPauseFrame redraw,void *co
             touchPosition pt;hidTouchRead(&pt);
             if(pt.py>=215 && page!=ROOT) back=true;
             else if(page==CREDITS) accept=pt.py>=162 && pt.py<202;
-            else if(page!=ROOT && pt.px>=298 && p->count>menu_rows(page)) down|=pt.py<127?KEY_DUP:KEY_DDOWN;
+            else if(page!=ROOT && pt.px>=298 && entries>menu_rows(page)) down|=pt.py<127?KEY_DUP:KEY_DDOWN;
             else {
                 int start=page==ROOT?ROOT_Y:MENU_Y,pitch=menu_pitch(page);
                 int row=(pt.py-start)/pitch,i=top+row;
                 bool hit=pt.py>=start && row<menu_rows(page) && (pt.py-start)%pitch<pitch-1 &&
                          pt.px>=12 && pt.px<296;
-                if(hit && i<p->count && (page==SAVE_SLOTS || (page==LOAD_SLOTS?slot_valid[i]:enabled(&p->list[i],paused)))){
+                if(hit && i<entries && (page==SAVE_SLOTS ||
+                    (page==LOAD_SLOTS?slot_valid[menu_slot(page,i)]:enabled(&p->list[i],paused)))){
                     *position=i;dirty=true;accept=true;
-                    if(page==GYRO_MENU && gyro_sensitivity(p->list[i].argument)){
+                    if(p->list && p->list[i].action==CHANGE && percent_max(p->list[i].argument)){
                         accept=false;
-                        if(pt.px>=GYRO_MINUS_X && pt.px<GYRO_MINUS_X+GYRO_BUTTON_WIDTH)down|=KEY_DLEFT;
-                        if(pt.px>=GYRO_PLUS_X && pt.px<GYRO_PLUS_X+GYRO_BUTTON_WIDTH)down|=KEY_DRIGHT;
+                        if(pt.px>=MINUS_X && pt.px<MINUS_X+ADJUST_BUTTON_WIDTH)down|=KEY_DLEFT;
+                        if(pt.px>=PLUS_X && pt.px<PLUS_X+ADJUST_BUTTON_WIDTH)down|=KEY_DRIGHT;
                     }
                 }
             }
@@ -461,26 +580,29 @@ static UiChoice menu_loop(bool paused,bool can_save,UiPauseFrame redraw,void *co
         if(down&KEY_DUP) delta=-1;
         if(down&KEY_DDOWN) delta=1;
         if(page==ROOT && (down&(KEY_DLEFT|KEY_DRIGHT))) delta=(down&KEY_DLEFT)?-1:1;
-        if(delta) {*position=(*position+delta+p->count)%p->count;dirty=true;continue;}
+        if(delta) {*position=(*position+delta+entries)%entries;dirty=true;continue;}
         if(page==LOAD_SLOTS || page==SAVE_SLOTS) {
-            if(accept && (page==SAVE_SLOTS || slot_valid[*position])){
-                ui_save_slot=*position+(page==SAVE_SLOTS?2:0);return page==SAVE_SLOTS?UI_SAVE:UI_LOAD;
+            unsigned slot=menu_slot(page,*position);
+            if(accept && page==SAVE_SLOTS){ui_save_slot=slot;return UI_SAVE;}
+            if(accept && slot_valid[slot]){
+                if(select_save(slot))return UI_LOAD;
+                dirty=true;
             }
             continue;
         }
         const Entry *e=&p->list[*position];
         if(e->action==CHANGE && (accept || (down&(KEY_DLEFT|KEY_DRIGHT)))) {
-            change(e->argument,(down&KEY_DLEFT)?-1:1);dirty=true;continue;
+            dirty|=change(e->argument,(down&KEY_DLEFT)?-1:1);continue;
         }
         if(!accept || !enabled(e,paused)) continue;
         switch(e->action) {
-        case RESUME:if(paused)return UI_RESUME;ui_save_slot=0;return UI_LOAD;
+        case RESUME:if(paused)return UI_RESUME;if(select_save(0))return UI_LOAD;break;
         case ANIMATIONS:return UI_ANIMATIONS;
         case BONUS:return UI_BONUS;
         case TRAIN:return UI_TUTORIAL;
         case AUTHORED:return UI_ORIGINAL_TUTORIAL;
         case NEWGAME:selected_mode=(enum GameMode)e->argument;return UI_CAMPAIGN;
-        case PRESET:ui_settings.scheme=e->argument;write_settings();break;
+        case PRESET:if(ui_settings.scheme!=e->argument){ui_settings.scheme=e->argument;settings_dirty=true;}break;
         case LEAVE:return paused?UI_TITLE:UI_EXIT;
         case BACK:page=p->parent;break;
         case INFO:control_help(page,e);break;
@@ -502,6 +624,7 @@ static UiChoice menu(bool paused,bool can_save,UiPauseFrame redraw,void *context
 
     room_pause_overlay(paused && redraw);
     UiChoice result=menu_loop(paused,can_save,redraw,context);
+    write_settings();
     room_pause_overlay(false);
 
     if(paused && (result==UI_RESUME || result==UI_SAVE)){

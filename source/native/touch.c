@@ -26,8 +26,9 @@ TouchAction touch_update(TouchInput *s,bool held,int x,int y,unsigned buttons) {
     s->x=x;s->y=y;s->held=true;a.held=s->origin;return a;
 }
 
-float touch_look_angle(float stick,int pixels,float seconds,unsigned setting,bool vertical){
-    return (stick*seconds*(vertical?1.8125f:2.5f)+pixels*(vertical?.01125f:.015f))*(.5f+.25f*setting);
+float touch_look_angle(float stick,int pixels,float seconds,unsigned stick_percent,unsigned touch_percent,bool vertical){
+    return stick*seconds*(vertical?1.8125f:2.5f)*(stick_percent*.01f) +
+           pixels*(vertical?.01125f:.015f)*(touch_percent*.01f);
 }
 
 float cstick_axis(int value,unsigned deadzone_setting){

@@ -16,7 +16,8 @@ from PIL import Image
 from dade.maxpayne import ras
 from dade.maxpayne.model import read_model
 from max_payne_sdk.max_kf2 import MaxKF2Reader
-from native_texture import texture
+from campaign_faces import opposing_faces
+from native_texture import RGB565, RGB8, texture
 from pack_player import affine
 from weapon_motion import pack_weapon_motion
 from xbox_disc import archive_root
@@ -38,15 +39,18 @@ def pack(disc,source,out):
             data=read(model);local=Path(tmp)/Path(model).name;local.write_bytes(data)
             doc=MaxKF2Reader().parse(local);mesh=read_model(data)
             transforms={};batches=defaultdict(list);images={}
-            for geometry,src in zip(mesh.meshes,doc.meshes,strict=True):
+            for index,(geometry,src) in enumerate(zip(mesh.meshes,doc.meshes,strict=True)):
                 node=src.node;matrix=affine(node.object_to_parent_transform)
                 if node.parent_name:matrix=matrix@transforms[node.parent_name]
                 transforms[node.name]=matrix
                 points=np.array([(*v,1) for v in src.geometry.vertices])@matrix
+                faces=defaultdict(list)
                 for face in geometry.faces:
                     material=geometry.materials[face.material]
-                    for i,uv in zip(face.positions,face.coords,strict=True):
-                        batches[material].append((*points[i,:3],*geometry.coords[uv]))
+                    faces[material].append([(*points[i,:3],*geometry.coords[uv])
+                                            for i,uv in zip(face.positions,face.coords,strict=True)])
+                for material,triangles in faces.items():
+                    batches[material].append((index,np.asarray(triangles,dtype='<f4')))
             for mat in batches:
                 bitmap=mesh.materials[mat].lower()
                 candidates=[str(Path(model).parent/'textures'/bitmap),'data/database/level_items/sharedtextures/'+bitmap,
@@ -59,13 +63,33 @@ def pack(disc,source,out):
                 images[mat]=texture(Image.open(BytesIO(read(tex))))
             dest=out/kind/(name+'.mesh');dest.parent.mkdir(parents=True,exist_ok=True)
             temp=dest.with_suffix('.partial')
+            runs=[];counts=[];geometry=[]
+            for material,(key,parts) in enumerate(batches.items()):
+                count=0
+                for index,triangles in parts:
+                    num=len(triangles)*3
+                    # Opposite faces on the same animated node can occupy the
+                    # same depth. Cull only proven pairs so thin single faces
+                    # still draw from both sides.
+                    if kind=='weapons' and images[key][4] in (RGB8,RGB565) and len(triangles)>1:
+                        marked=np.zeros(len(triangles),dtype=bool)
+                        marked[opposing_faces(triangles[...,:3].astype(np.float64))]=True
+                        for cull,group in ((False,triangles[~marked]),(True,triangles[marked])):
+                            if len(group):
+                                runs.append((index,material,cull,len(group)*3))
+                                geometry.append(group.tobytes())
+                    else:
+                        if kind=='weapons':runs.append((index,material,False,num))
+                        geometry.append(triangles.tobytes())
+                    count+=num
+                counts.append(count)
             with temp.open('wb') as file:
-                file.write(struct.pack('<4sII',b'OBJ1',len(batches),sum(map(len,batches.values()))))
-                for key,vertices in batches.items():
-                    file.write(struct.pack('<I',len(vertices)));file.write(images[key])
-                for vertices in batches.values():file.write(np.array(vertices,dtype='<f4').tobytes())
+                file.write(struct.pack('<4sII',b'OBJ1',len(batches),sum(counts)))
+                for key,count in zip(batches,counts,strict=True):
+                    file.write(struct.pack('<I',count));file.write(images[key])
+                for vertices in geometry:file.write(vertices)
             temp.replace(dest)
-            if kind=="weapons":pack_weapon_motion(read,config,base,doc,mesh,tmp,dest.with_suffix(".motion"))
+            if kind=="weapons":pack_weapon_motion(read,config,base,doc,runs,tmp,dest.with_suffix(".motion"))
         for kind,item_names,folder in [('items',names,'level_items'),('weapons',WEAPONS,'weapons'),
                                       ('debris',('debris_blue_sign','debris_wood_crate','wood_crate'),'projectiles'),
                                       ('cases',('case_9mm','case_50cal','case_12ga','case_300cal','case_40mm'),'projectiles')]:

@@ -73,6 +73,18 @@ static bool check_payload(const char *name,const SaveHeader *h,bool *intact) {
     *intact=ok && hash==h->crc;
     return ok;
 }
+bool save_loadable(unsigned slot){
+    SaveHeader h;
+    int bank=newest(slot,&h);
+    if(bank<0)return false;
+    for(unsigned i=0;i<2;i++){
+        char name[64];
+        path(name,slot,(bank+i)%2);
+        bool intact;
+        if(inspect(name,&h) && check_payload(name,&h,&intact) && intact)return true;
+    }
+    return false;
+}
 typedef struct {
     SaveHeader header;
     uint64_t modified;

@@ -70,7 +70,32 @@ int main(void){
  FILE *reference=fopen("audio.bank","rb");assert(reference && !fseek(reference,long_clip->at,SEEK_SET));
  int16_t expected[SAMPLES];assert(fread(expected,2,SAMPLES,reference)==SAMPLES);fclose(reference);
  assert(!memcmp(expected,voices[0].samples,sizeof expected));
+
+ // A door can expose a running emitter at any sample, including just before
+ // the end of its preloaded prefix. Verify both PCM chunks without a reread.
+ bank_clear();
+ const Record *loop=find_clip("ambient/subway_train_loop");
+ assert(loop && (loop->flags&3)==3 && loop->bytes>PREFIX_BYTES+READ_AHEAD);
+ bank_preload("ambient","subway_train_loop");
+ const unsigned tail=231,offset=PREFIX_BYTES-2*tail;
+ int16_t crossing[SAMPLES+tail];
+ reference=fopen("audio.bank","rb");
+ assert(reference && !fseek(reference,loop->at+offset,SEEK_SET));
+ assert(fread(crossing,2,SAMPLES+tail,reference)==SAMPLES+tail);
+ fclose(reference);
+ main_reads=0;blocked=false;hold_reads=true;
+ play(1,loop,(Emitter){.spatial=true},0,1,offset,0);
+ for(unsigned i=0;i<1000 && !blocked;i++){struct timespec wait={0,1000000};nanosleep(&wait,NULL);}
+ assert(blocked && voices[1].offset==PREFIX_BYTES && voices[1].buffers[0].nsamples==tail);
+ assert(!memcmp(crossing,voices[1].samples,tail*2));
+ hold_reads=false;
+ for(unsigned i=0;i<1000 && !voices[1].buffers[1].nsamples;i++){
+  fill(1);struct timespec wait={0,1000000};nanosleep(&wait,NULL);
+ }
+ assert(!main_reads && voices[1].buffers[1].nsamples==SAMPLES);
+ assert(!memcmp(crossing+tail,voices[1].samples+SAMPLES,SAMPLES*2));
  bank_close();assert(host_linear_frees==host_linear_allocations);
  printf("All %u retail shot/impact/casing variants play without disk reads or voice reallocation within the 1 MiB cache.\n",variants);
  puts("120 frame ticks stay responsive while streaming FS is blocked; pending music resumes with the original PCM.");
+ puts("Unaligned positional audio continues across the preload boundary without discarding cached samples.");
 }

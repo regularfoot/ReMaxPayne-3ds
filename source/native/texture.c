@@ -12,17 +12,16 @@ static bool valid_size(unsigned size) {
     return size>=8 && size<=1024 && !(size&(size-1));
 }
 
-bool native_texture_read(FILE *file,C3D_Tex *tex) {
+static bool read_texture(FILE *file,C3D_Tex *tex,unsigned limit,bool require_limit) {
     TextureHeader h;
     if (fread(&h,sizeof h,1,file)!=1 || !valid_size(h.width) || !valid_size(h.height) ||
         (h.format!=GPU_RGBA8 && h.format!=GPU_RGB8 && h.format!=GPU_RGB565 && h.format!=GPU_RGBA4) || h.clamp>1 || h.reserved ||
         h.max_level>C3D_TexCalcMaxLevel(h.width,h.height)) return false;
     unsigned bytes_per_texel=h.format==GPU_RGBA8?4:h.format==GPU_RGB8?3:2;
-    // Both models share a package; only New 3DS allocates the larger base.
-    static bool checked,enhanced;
-    if(!checked){APT_CheckNew3DS(&enhanced);checked=true;}
-    while(!enhanced && (h.width>128 || h.height>128)){
-        if(!h.max_level || fseek(file,(long)h.width*h.height*bytes_per_texel,SEEK_CUR))return false;
+    while(h.width>limit || h.height>limit){
+        // Some narrow textures run out of mips before reaching the selected limit.
+        if(!h.max_level){if(require_limit)return false;break;}
+        if(fseek(file,(long)h.width*h.height*bytes_per_texel,SEEK_CUR))return false;
         h.width>>=1;h.height>>=1;h.max_level--;
     }
     C3D_TexInitParams params={.width=h.width,.height=h.height,.format=h.format,
@@ -39,4 +38,13 @@ bool native_texture_read(FILE *file,C3D_Tex *tex) {
     GPU_TEXTURE_WRAP_PARAM wrap=h.clamp?GPU_CLAMP_TO_EDGE:GPU_REPEAT;
     C3D_TexSetWrap(tex,wrap,wrap);
     return true;
+}
+
+bool native_texture_read(FILE *file,C3D_Tex *tex){
+    static bool checked,enhanced;
+    if(!checked){APT_CheckNew3DS(&enhanced);checked=true;}
+    return read_texture(file,tex,enhanced?1024:128,true);
+}
+bool native_texture_read_limit(FILE *file,C3D_Tex *tex,unsigned limit){
+    return read_texture(file,tex,limit,false);
 }

@@ -54,7 +54,7 @@ def integrated_rate(layer, t):
 def pack(disc, output):
     # Port-authored atlas coordinates in the order of the RPS sprite references.
     layouts = json.loads(Path(__file__).with_name('particle_atlas_layout.json').read_text())
-    slots={};sprites=[];definitions=[];shape_curves=[];groups=[];layers=[];variants=[];lifetimes=[];drag=[]
+    slots={};atlases=[];open_pages={};definitions=[];shape_curves=[];groups=[];layers=[];variants=[];lifetimes=[];drag=[]
     with (archive_root(disc)/'x_data.ras').open('rb') as file, mmap.mmap(file.fileno(),0,access=mmap.ACCESS_READ) as archive:
         entries = {e.path.lower():e for e in ras.read_directory(archive).entries}
         def read(path):
@@ -87,14 +87,24 @@ def pack(disc, output):
                         cell=source.crop((x*w,y*h,(x+1)*w,(y+1)*h))
                         if flip:cell=cell.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
                         if layer.additive:cell.putalpha(255)
-                        cell_size=32 if name.startswith('muzzle_') else CELL
+                        # Glass and thin splinters lose their silhouette when
+                        # the authored 32-pixel alpha mask is halved.
+                        hires=name.startswith('muzzle_') or (mask and image.startswith('debris\\') and min(w,h)>=32)
+                        cell_size=32 if hires else CELL
                         cell=cell.resize((cell_size,cell_size),Image.Resampling.LANCZOS)
                         t=(i+.5)/4
                         tint=[sample(layer.curves[3],t,c) for c in range(3)]+[sample(layer.curves[2],t)]
                         color=tuple(max(0,min(255,round(v))) for v in tint)
                         cell=ImageChops.multiply(cell,Image.new('RGBA',cell.size,color))
                         digest=hashlib.sha256(cell.tobytes()).digest()
-                        if digest not in slots:slots[digest]=len(sprites);sprites.append(cell)
+                        if digest not in slots:
+                            if cell_size not in open_pages or len(atlases[open_pages[cell_size]][1])==PER_PAGE:
+                                open_pages[cell_size]=len(atlases)
+                                atlases.append((cell_size,[]))
+                            page=open_pages[cell_size]
+                            cells=atlases[page][1]
+                            slots[digest]=page*PER_PAGE+len(cells)
+                            cells.append(cell)
                         frames.append(slots[digest])
                     variants.append(frames)
                 frames=variants[first_variant]
@@ -124,13 +134,13 @@ def pack(disc, output):
                     definitions.append(struct.pack('<64s4HBB2xf',name.encode(),*frames,motion(name,path),loop,area))
                     shape_curves.append(encoded)
     pages=[]
-    for start in range(0,len(sprites),PER_PAGE):
-        cells=sprites[start:start+PER_PAGE];size=max(s.width for s in cells)
+    if len(atlases)>64:raise ValueError('Too many particle texture pages')
+    for size,cells in atlases:
         page=Image.new('RGBA',(size*8,size*8))
         for i,sprite in enumerate(cells):
-            page.paste(sprite.resize((size,size),Image.Resampling.LANCZOS),((i%8)*size,(i//8)*size))
+            page.paste(sprite,((i%8)*size,(i//8)*size))
         if size==32:
-            # New uses the sharper muzzle atlas. Old skips its 256 base and
+            # New uses the sharper sprite atlas. Old skips its 256 base and
             # retains the original 16-pixel cells, with no extra resident cost.
             low=page.resize((128,128),Image.Resampling.BOX)
             pages.append(struct.pack('<HHBBBB',256,256,RGBA4,1,1,0)+_tile(page,RGBA4)+_tile(low,RGBA4))
@@ -141,7 +151,7 @@ def pack(disc, output):
     data+=b'ELT1'+b''.join(lifetimes)
     data+=b'DRG1'+b''.join(drag)
     tmp=output.with_suffix('.partial');tmp.write_bytes(data);tmp.replace(output)
-    print(f'{len(definitions)} particle definitions, {len(layers)} emitters, {len(variants)} sprite sequences, {len(sprites)} distinct sprites on {len(pages)} pages')
+    print(f'{len(definitions)} particle definitions, {len(layers)} emitters, {len(variants)} sprite sequences, {len(slots)} distinct sprites on {len(pages)} pages')
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)

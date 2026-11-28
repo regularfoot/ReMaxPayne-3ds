@@ -20,7 +20,7 @@ static C3D_Tex pause_word;static bool pause_ready;
 static Vertex *vertices;
 static C3D_BufInfo binding;
 static unsigned count,marks,flash,mask;
-static struct {unsigned room,image;Point center;} mark_batches[IMPACT_COUNT];
+static struct {unsigned room,image;} mark_batches[IMPACT_COUNT];
 static unsigned batch_count;
 static bool interaction_mark;
 
@@ -89,8 +89,7 @@ void effects_prepare(const Effects *fx,const Camera *camera,unsigned zoom,bool i
         if(choice && choice->texture==65535)continue;
         float radius=choice?choice->radius:.039f;unsigned image=choice?choice->texture+1:0;
         rect(center,(Point){t.x,t.y,t.z},(Point){b.x,b.y,b.z},0,0,radius,radius);
-        mark_batches[batch_count].room=mark->room;mark_batches[batch_count].image=image;
-        mark_batches[batch_count++].center=center;
+        mark_batches[batch_count].room=mark->room;mark_batches[batch_count++].image=image;
     }
     marks=count;
     if (fx->flash>0) {
@@ -155,7 +154,7 @@ void effects_queue(const C3D_Mtx *view,const Effects *fx){
             const C3D_Mtx *placement=campaign_visible_transform(v);
             if(!placement)continue;
             C3D_Mtx matrix;Mtx_Multiply(&matrix,view,placement);
-            alpha_submit(ALPHA_MARK,&matrix,mark_batches[i].center,v,&binding,6*i,6,image?decal_tex+image-1:NULL,NULL,0xff27252b);
+            alpha_submit(ALPHA_MARK,&matrix,v,&binding,6*i,6,image?decal_tex+image-1:NULL,NULL,0xff27252b);
         }
     }
     if(flash==marks)return;
@@ -166,7 +165,7 @@ void effects_queue(const C3D_Mtx *view,const Effects *fx){
         Point origin=fx->muzzle;
         C3D_FVec p=Mtx_MultiplyFVecH(placement,FVec3_New(origin.x,origin.y,origin.z));
         C3D_Mtx matrix=*view;Mtx_Translate(&matrix,p.x-origin.x,p.y-origin.y,p.z-origin.z,true);
-        alpha_submit(ALPHA_MARK,&matrix,origin,v,&binding,marks,flash-marks,NULL,NULL,0xff66d9ff);
+        alpha_submit(ALPHA_MARK,&matrix,v,&binding,marks,flash-marks,NULL,NULL,0xff66d9ff);
     }
 }
 void effects_draw(bool crosshair,bool standalone){

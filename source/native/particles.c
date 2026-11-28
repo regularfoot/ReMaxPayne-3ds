@@ -13,11 +13,13 @@ enum { LIMIT=160, PAGES=64, CLIP_VERTICES=10, TRIANGLE_VERTICES=(CLIP_VERTICES-2
 typedef struct {char name[64];uint16_t frames[4];uint8_t kind,loop;uint16_t reserved;float area;} Definition;
 typedef struct {Point pos,velocity;float age,life,size;uint16_t effect,room,owner,layer,variant,flip;float angle,spin;Point low,high;} Sprite;
 typedef struct {Point point;float u,v;} Vertex;
-typedef struct {unsigned page,portal,first,count;bool additive;Point center;} Batch;
+typedef struct {unsigned page,portal,first,count;bool additive;} Batch;
 static Definition *defs;
 static ParticleGroup *groups;
 static ParticleLayer *layers;
 static ParticleDrag *drag;
+static float *drag_factors;
+static unsigned drag_count;
 static struct {float mean,spread;} *lifetimes;
 static uint16_t (*variants)[4];
 typedef struct {Point low,high,origin,marker;unsigned room;float ttl;} ClipBox;
@@ -45,7 +47,7 @@ void particles_close(void) {
     free(shape_curves);shape_curves=NULL;
     free(variants);variants=NULL;
     free(lifetimes);lifetimes=NULL;
-    free(groups);groups=NULL;free(layers);layers=NULL;free(drag);drag=NULL;
+    free(groups);groups=NULL;free(layers);layers=NULL;free(drag);drag=NULL;free(drag_factors);drag_factors=NULL;drag_count=0;
     free(defs);defs=NULL;vertices=NULL;num_defs=num_pages=count=0;
 }
 bool particles_open(void) {
@@ -87,6 +89,10 @@ bool particles_open(void) {
                                 drag=calloc(n,sizeof *drag);
                                 ok=length==4 && !memcmp(tag,"DRG1",4) && drag && fread(drag,sizeof *drag,n,file)==n && fgetc(file)==EOF;
                                 for(unsigned j=0;ok && j<n;j++)ok=isfinite(drag[j].strength) && drag[j].size_mode<=2 && drag[j].velocity_mode<=2 && !drag[j].reserved;
+                                if(ok){
+                                    drag_factors=malloc(n*sizeof *drag_factors);
+                                    if(drag_factors)drag_count=n;
+                                }
                             }
                         }
                         for(unsigned k=0;ok && k<sequences;k++){
@@ -443,6 +449,7 @@ void particles_light(unsigned room,Point target,IncidentLight *light){
 }
 void particles_tick(float dt) {
     last_step=dt;
+    if(drag_count)memset(drag_factors,0,drag_count*sizeof *drag_factors);
     lamp_time=fmodf(lamp_time+dt,628.31853f);
     for(unsigned i=0;i<PARTICLE_SOURCES;i++){
         ParticleSource *s=particle_sources+i;if(!s->effect)continue;
@@ -471,13 +478,25 @@ void particles_tick(float dt) {
         Sprite *p=sprites+i;if(p->age>=p->life)continue;p->age+=dt;
         unsigned k=defs[p->effect].kind;if(layers)p->velocity.y=particle_vertical_step(p->velocity.y,layers[p->layer].gravity,dt);
         else if(k==3 || k==5 || k==6)p->velocity.y-=6.f*dt;
-        if(drag){
+        const ParticleDrag *resistance=drag?drag+p->layer:NULL;
+        if(resistance && resistance->strength!=0){
             float speed=sqrtf(p->velocity.x*p->velocity.x+p->velocity.y*p->velocity.y+p->velocity.z*p->velocity.z);
-            float key=fminf(15,p->age/p->life*15);unsigned a=(unsigned)key;
-            const uint8_t *shape=layers[p->layer].shape;
-            float diameter=2*p->size*particle_lerp(shape[a],shape[a<15?a+1:a],key-a)/255.f;
-            float ratio=speed>.00001f?particle_drag_speed(speed,diameter,drag+p->layer,dt)/speed:1;
-            p->velocity.x*=ratio;p->velocity.y*=ratio;p->velocity.z*=ratio;
+            if(speed>.00001f){
+                float diameter=0,slowed;
+                if(resistance->size_mode){
+                    float key=fminf(15,p->age/p->life*15);unsigned a=(unsigned)key;
+                    const uint8_t *shape=layers[p->layer].shape;
+                    diameter=2*p->size*particle_lerp(shape[a],shape[a<15?a+1:a],key-a)/255.f;
+                }
+                if(drag_factors && !resistance->size_mode && resistance->velocity_mode==2){
+                    // All sprites from this layer use the same exponential factor for this tick.
+                    float *factor=drag_factors+p->layer;
+                    if(!*factor)*factor=particle_drag_speed(1,0,resistance,dt);
+                    slowed=speed * *factor;
+                }else slowed=particle_drag_speed(speed,diameter,resistance,dt);
+                float ratio=slowed/speed;
+                p->velocity.x*=ratio;p->velocity.y*=ratio;p->velocity.z*=ratio;
+            }
         }
         p->pos.x+=p->velocity.x*dt;p->pos.y+=p->velocity.y*dt;p->pos.z+=p->velocity.z*dt;
         if(p->flip&SPRITE_CLIPPED){
@@ -587,7 +606,10 @@ void particles_prepare(const Camera *c) {
             unsigned kind=defs[p->effect].kind;bool additive=layers?layers[p->layer].additive:(kind==1 || kind==4 || kind==5);
             unsigned added=sprite_geometry(vertices+used,p,o,body.yaw,c,frame,size,(p->flip&SPRITE_CLIPPED)!=0);
             if(!added)continue;
-            batches[count++]=(Batch){page,portal,used,added,additive,o};
+            Batch *previous=count?batches+count-1:NULL;
+            if(previous && previous->page==page && previous->portal==portal && previous->additive==additive)
+                previous->count+=added;
+            else batches[count++]=(Batch){page,portal,used,added,additive};
             used+=added;n++;
         }
     }
@@ -597,7 +619,7 @@ void particles_queue(const C3D_Mtx *view){
     for(unsigned i=0;i<count;i++){
         const Batch *b=batches+i;
         if(campaign_visible_transform(b->portal))
-            alpha_submit(b->additive?ALPHA_GLOW:ALPHA_PARTICLE,view,b->center,b->portal,&binding,
+            alpha_submit(b->additive?ALPHA_GLOW:ALPHA_PARTICLE,view,b->portal,&binding,
                          b->first,b->count,pages+b->page,NULL,0);
     }
 }

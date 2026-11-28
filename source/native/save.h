@@ -15,6 +15,7 @@ bool save_unlock_mode(unsigned mode);
 bool save_completed(void);
 bool save_completion(void);
 bool save_info(unsigned slot,SaveHeader *header);
+bool save_loadable(unsigned slot);
 unsigned save_autosave_slot(const char *stage);
 // Pass the current mode's autosave slot. A negative result means no intact save.
 int save_latest(unsigned automatic_slot);

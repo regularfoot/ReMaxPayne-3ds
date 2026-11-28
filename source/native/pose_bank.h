@@ -24,6 +24,7 @@ void pose_events(unsigned actor,unsigned action,float after,float through,PoseMe
 void pose_events_advance(unsigned actor,unsigned action,float after,float through,bool looping,PoseMessage send);
 bool pose_message_matches(unsigned action,const char *op,const char *first,const char *second);
 bool pose_has_event(unsigned action,const char *op);
+bool pose_has_target_event(unsigned action,const char *target,const char *op);
 unsigned pose_bank_skin(const char *name);
 bool pose_bank_open(void);
 void pose_bank_close(void);

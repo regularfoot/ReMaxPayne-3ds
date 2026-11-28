@@ -16,6 +16,7 @@ bool scene_open(const Triangle *faces,unsigned count);
 enum { SCENE_BODY=1,SCENE_SHOT=2,SCENE_BIG_SHOT=4,SCENE_PIERCE=8,SCENE_PLAYER_OVERLAP=16 };
 bool scene_open_masks(const Triangle *faces,unsigned count,const uint8_t *mask);
 float scene_panel_distance(const Triangle *face,const Player *body);
+float scene_overhead_distance(const Triangle *face,const Player *body);
 bool scene_panel_blocks(const Triangle *face,const Player *body,Point target,bool airborne);
 bool scene_wall_overlap(unsigned first,unsigned count,const Player *body,bool airborne);
 bool scene_body_touched(unsigned first,unsigned count);
@@ -32,7 +33,7 @@ void scene_camera_sweep(Camera *c,const Player *p,float dt,CameraTrace trace);
 void scene_camera_converge(Camera *camera,const Player *player,float distance,float weight);
 void scene_camera(Camera *camera,const Player *p,float dt);
 // Presentation only: the subject and simulation remain frozen while this runs.
-typedef struct {Camera view;Point pivot;float angle,direction,radius,height;} PauseCamera;
+typedef struct {Camera view;Point pivot;float angle,direction,radius,height;bool orbiting;} PauseCamera;
 void scene_pause_begin(PauseCamera *orbit,const Camera *entry,const Player *player);
 void scene_pause_step(PauseCamera *orbit,float dt,CameraTrace trace);
 void scene_scope(Camera *camera,const Player *p);

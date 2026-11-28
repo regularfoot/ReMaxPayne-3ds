@@ -39,7 +39,7 @@ bool director_signature_matches(uint32_t value);
 bool director_valid_state(void);
 void director_preload_sounds(void (*preload)(const char *group,const char *name));
 void director_start(void);
-typedef bool (*DirectorMotionBlocked)(unsigned prop,unsigned room,const float *from,const float *to);
+typedef bool (*DirectorMotionBlocked)(unsigned prop,unsigned room,const float *from,const float *to,bool damaging);
 void director_motion_guard(DirectorMotionBlocked guard);
 // Doorway and use sensors may belong to another authored room. Ordinary rooms
 // map through a nearby aperture; moving cabins use their visible placement.

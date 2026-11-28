@@ -8,10 +8,13 @@ typedef enum { UI_RESUME, UI_TUTORIAL, UI_CAMPAIGN, UI_TITLE, UI_EXIT, UI_LOAD, 
 typedef struct {
     unsigned char horizontal,vertical,deadzone,volume,inverted,tips,music,scheme,reticle,autoaim,lock,autoswitch,slow_assist,recenter,quickaim,gyro;
     unsigned char gyro_horizontal,gyro_vertical;
+    unsigned char stick_horizontal,stick_vertical,touch_horizontal,touch_vertical;
+    unsigned char world_textures,sky_textures;
 } UiSettings;
 extern UiSettings ui_settings;
 bool ui_touch_shortcuts(void);
 bool ui_touch_slow(void);
+unsigned ui_texture_limit(bool sky);
 void ui_begin_update(void);
 void ui_end_update(void);
 uint32_t ui_game_keys(uint32_t keys);

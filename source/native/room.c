@@ -342,24 +342,25 @@ static void draw_neighbours(const C3D_Mtx *combined,const Mission *mission) {
     C3D_StencilTest(false,GPU_ALWAYS,0,0xff,0xff);
 }
 
-static void campaign_fog(void) {
+static void campaign_fog(float projection_near,uint32_t color) {
     static C3D_FogLut lut;
-    static float previous_near=-INFINITY,previous_far=-INFINITY,previous_clip=0;
+    static float previous_near=-INFINITY,previous_far=-INFINITY,previous_near_clip=0,previous_far_clip=0;
     if(!presentation.fog){C3D_FogGasMode(GPU_NO_FOG,GPU_PLAIN_DENSITY,false);return;}
     float near=presentation_value(presentation.fog_near),far=presentation_value(presentation.fog_far);
-    if(near!=previous_near || far!=previous_far || previous_clip!=far_clip) {
+    if(near!=previous_near || far!=previous_far || previous_near_clip!=projection_near || previous_far_clip!=far_clip) {
         float curve[256],last=0;
         for(unsigned i=0;i<=128;i++) {
-            float z=FogLut_CalcZ(i/128.f,near_clip,far_clip);
+            float z=FogLut_CalcZ(i/128.f,projection_near,far_clip);
             float clear=fminf(1,fmaxf(0,(far-z)/fmaxf(.001f,far-near)));
             if(i<128)curve[i]=clear;
             if(i)curve[127+i]=clear-last;
             last=clear;
         }
-        FogLut_FromArray(&lut,curve);previous_near=near;previous_far=far;previous_clip=far_clip;
+        FogLut_FromArray(&lut,curve);previous_near=near;previous_far=far;
+        previous_near_clip=projection_near;previous_far_clip=far_clip;
     }
     C3D_FogGasMode(GPU_FOG,GPU_PLAIN_DENSITY,false);
-    C3D_FogColor(__builtin_bswap32(presentation_fog())>>8);C3D_FogLutBind(&lut);
+    C3D_FogColor(color);C3D_FogLutBind(&lut);
 }
 static void clear_eye(C3D_RenderTarget *screen,u32 color) {
     // Clear in the drawing command list so color, depth and stencil are ready
@@ -391,12 +392,13 @@ static void clear_eye(C3D_RenderTarget *screen,u32 color) {
     C3D_StencilOp(GPU_STENCIL_KEEP,GPU_STENCIL_KEEP,GPU_STENCIL_KEEP);
 }
 
-static void draw_eye(C3D_RenderTarget *screen,const C3D_Mtx *projection_eye,const C3D_Mtx *view,
+static void draw_eye(C3D_RenderTarget *screen,const C3D_Mtx *projection_eye,const C3D_Mtx *view,float clip,
                      const Player *p,const Animation *anim,const Mission *mission,const Enemy *cast,bool unarmed,unsigned visible,const Effects *fx) {
     clear_eye(screen,0xff181818);
     if(!mission){
-        campaign_fog();
-        alpha_begin(projection_location,&world_attr,&actor_attr,&skin_attr,&world_env,campaign_fog);
+        uint32_t fog_color=__builtin_bswap32(presentation_fog())>>8;
+        campaign_fog(clip,fog_color);
+        alpha_begin(projection_location,&world_attr,&actor_attr,&skin_attr,&world_env,presentation.fog,fog_color);
     }
     C3D_SetAttrInfo(&world_attr);
     C3D_SetBufInfo(&world_binding);
@@ -596,13 +598,13 @@ static void render_frame(const Player *p,const Animation *anim,const Camera *cam
             }
             float iod=(side?1.f:-1.f)*.064f*slider/zoom;
             Mtx_PerspStereoTilt(&lens,fov,400.f/240.f,clip,far_clip,iod,zoom>1?SCOPE_FOCUS:STEREO_FOCUS,true);
-            draw_eye(side?right_target:target,&lens,&view,p,anim,mission,cast,unarmed,visible,fx);
+            draw_eye(side?right_target:target,&lens,&view,clip,p,anim,mission,cast,unarmed,visible,fx);
         }
     } else if (zoom>1 || scale!=1 || clip!=near_clip) {
         C3D_Mtx lens;
         Mtx_PerspTilt(&lens,fov,400.f/240.f,clip,far_clip,true);
-        draw_eye(target,&lens,&view,p,anim,mission,cast,unarmed,visible,fx);
-    } else draw_eye(target,&projection,&view,p,anim,mission,cast,unarmed,visible,fx);
+        draw_eye(target,&lens,&view,clip,p,anim,mission,cast,unarmed,visible,fx);
+    } else draw_eye(target,&projection,&view,clip,p,anim,mission,cast,unarmed,visible,fx);
     draw_timing.commands=svcGetSystemTick()-section;section=svcGetSystemTick();
     async_log_gpu_frame(mission?(unsigned)mission->room:campaign_room_id(),first_eye_words+gpuCmdBufOffset,stereo_active?2:1);
     async_log_watch("gpu-submit");

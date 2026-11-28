@@ -445,7 +445,8 @@ bool campaign_contact_frame(unsigned from,unsigned to,Point center,Point *mapped
     }
     return false;
 }
-bool campaign_panel_blocked(unsigned prop,unsigned room,const float *from,const float *to){
+static bool moving_contact_frame(unsigned prop,unsigned from,unsigned to,const float *motion,Point *center);
+bool campaign_panel_blocked(unsigned prop,unsigned room,const float *from,const float *to,bool damaging){
     if(room>=world.h.rooms || director.state[0].room>=world.h.rooms || prop>=world.h.props || director.state[0].dead || campaign_props[prop].hidden ||
        !(prop_channels(campaign_props+prop)&SCENE_BODY))return false;
     if(!memcmp(from,to,12*sizeof(float)))return false;
@@ -462,11 +463,13 @@ bool campaign_panel_blocked(unsigned prop,unsigned room,const float *from,const 
             C3D_Mtx inverse=guest->placement;Mtx_Inverse(&inverse);
             C3D_FVec local=Mtx_MultiplyFVecH(&inverse,FVec3_New(center.x,center.y,center.z));
             center=(Point){local.x,local.y,local.z};
-        }else if(!campaign_contact_frame(director.state[0].room,room,center,&center))return false;
+        }else if(!campaign_contact_frame(director.state[0].room,room,center,&center) &&
+                 !moving_contact_frame(prop,room,director.state[0].room,to,&center))return false;
         body.position=center;body.position.y-=.9f;
     }
     const float radius=.225f;
     Point feet=body.position;
+    float head=feet.y+1.7f;
     for(unsigned i=0;i<r->info.solids;i++){
         const Solid *s=r->solids+i;if(s->prop!=(int)prop)continue;
         Point mid={(s->lo.x+s->hi.x)*.5f,(s->lo.y+s->hi.y)*.5f,(s->lo.z+s->hi.z)*.5f};
@@ -479,8 +482,11 @@ bool campaign_panel_blocked(unsigned prop,unsigned room,const float *from,const 
             if(!((r->materials[s->first+j]>>4)&SCENE_BODY))continue;
             const Triangle *t=s->original+j;
             Triangle next={apply(to,t->a),apply(to,t->b),apply(to,t->c),0};
-            after=fminf(after,scene_panel_distance(&next,&body));
             Triangle old={apply(from,t->a),apply(from,t->b),apply(from,t->c),0};
+            // The ordinary panel test only uses walls. A hazard coming down
+            // from above can instead hit the top of the player's body.
+            bool overhead=damaging && old.a.y>head && old.b.y>head && old.c.y>head;
+            after=fminf(after,overhead?scene_overhead_distance(&next,&body):scene_panel_distance(&next,&body));
             before=fminf(before,scene_panel_distance(&old,&body));
         }
         if(after<radius*radius && after+.000001f<before)return true;
@@ -647,14 +653,15 @@ int campaign_contact(Point point,float radius) {
     for(unsigned i=0;i<world.info.solids;i++) if(in_solid(world.solids+i,point,radius)) return world.solids[i].prop;
     return -1;
 }
-static bool load_textures(const Mesh *m) {
+static bool load_textures(const Mesh *m,unsigned base_limit,unsigned world_limit) {
     for(unsigned i=0;i<m->count;i++) {
         unsigned ids[]={m->batches[i].base&TEXTURE_INDEX,m->batches[i].light&TEXTURE_INDEX};
         for(unsigned j=0;j<2;j++) {
             unsigned id=ids[j];
             if(world.loaded[id]) continue;
             unsigned index=1+world.h.rooms+id;
-            if(!seek_to(index) || !native_texture_read(world.file,&world.textures[id])) return false;
+            unsigned limit=j?world_limit:base_limit;
+            if(!seek_to(index) || !native_texture_read_limit(world.file,&world.textures[id],limit))return false;
             world.loaded[id]=true;
             if(ftell(world.file)!=(long)world.offset[index+1]) return false;
         }
@@ -667,8 +674,8 @@ static void extend_box(RayBounds *box,Point p){
     box->hi=(Point){fmaxf(box->hi.x,p.x),fmaxf(box->hi.y,p.y),fmaxf(box->hi.z,p.z)};
 }
 static bool prepare_stage(void) {
-    unsigned sky_batches;
-    if(!seek_to(0) || !read_data(&sky_batches,4,1) || !read_mesh(&world.sky,sky_batches,UINT32_MAX) || !load_textures(&world.sky))return false;
+    unsigned sky_batches,world_limit=ui_texture_limit(false);
+    if(!seek_to(0) || !read_data(&sky_batches,4,1) || !read_mesh(&world.sky,sky_batches,UINT32_MAX) || !load_textures(&world.sky,ui_texture_limit(true),world_limit))return false;
     world.rooms=calloc(world.h.rooms,sizeof(StageRoom));if(!world.rooms)return false;
     for(unsigned id=0;id<world.h.rooms;id++){
         ui_loading_progress(5+65*id/world.h.rooms);
@@ -694,7 +701,7 @@ static bool prepare_stage(void) {
         if(!r->masks_live)return false;
         memset(r->masks_live,SCENE_BODY|SCENE_SHOT,r->faces);
         r->solid_data=malloc(r->solid_bytes?r->solid_bytes:1);
-        if(!r->solid_data || !read_data(r->solid_data,1,r->solid_bytes) || !index_solids(r) || !load_textures(&r->geometry))return false;
+        if(!r->solid_data || !read_data(r->solid_data,1,r->solid_bytes) || !index_solids(r) || !load_textures(&r->geometry,world_limit,world_limit))return false;
         unsigned count=r->info.exits;if(!count)continue;
         r->openings=malloc(count*sizeof(Aperture));if(!r->openings)return false;
         memcpy(r->openings,openings,count*sizeof(Aperture));
@@ -957,6 +964,37 @@ static bool through_exit(const Aperture *a,const C3D_Mtx *from,RayBounds home,co
         hit.y+extent[1]>=a->box.lo.y && hit.y-extent[1]<=a->box.hi.y &&
         hit.z+extent[2]>=a->box.lo.z && hit.z-extent[2]<=a->box.hi.z;
 }
+typedef struct {unsigned room;C3D_Mtx from;} MovingRoom;
+static MovingRoom moving_route[128];
+static unsigned trace_moving_rooms(unsigned home,RayBounds box,const float *motion,unsigned target,bool visited[128]){
+    unsigned tail=1;
+    visited[home]=true;moving_route[0].room=home;Mtx_Identity(&moving_route[0].from);
+    for(unsigned q=0;q<tail;q++){
+        const MovingRoom *current=moving_route+q;
+        const StageRoom *room=world.rooms+current->room;
+        for(unsigned k=0;k<room->info.exits;k++){
+            const Aperture *a=room->openings+k;unsigned dest=a->exit.room;
+            if(visited[dest] || !through_exit(a,&current->from,box,motion))continue;
+            C3D_Mtx next;matrix(&next,a->exit.transform);
+            moving_route[tail].room=dest;Mtx_Multiply(&moving_route[tail].from,&next,&current->from);
+            visited[dest]=true;tail++;
+            if(dest==target)return tail;
+        }
+    }
+    return tail;
+}
+static bool moving_contact_frame(unsigned prop,unsigned from,unsigned to,const float *motion,Point *center){
+    if(!world.prop_bounds[prop].used || world.prop_bounds[prop].room!=from)return false;
+    // The current pose has not necessarily registered this prop as a guest.
+    // Check the same aperture path using the proposed pose.
+    bool visited[128]={0};
+    unsigned count=trace_moving_rooms(from,world.prop_bounds[prop].box,motion,to,visited);
+    if(!visited[to])return false;
+    C3D_Mtx inverse=moving_route[count-1].from;Mtx_Inverse(&inverse);
+    C3D_FVec local=Mtx_MultiplyFVecH(&inverse,FVec3_New(center->x,center->y,center->z));
+    *center=(Point){local.x,local.y,local.z};
+    return true;
+}
 static bool set_contains(const PropSet *set,unsigned id){return (set->bits[id/32]>>(id%32))&1u;}
 static void affine(float out[12],const C3D_Mtx *m){
     for(unsigned i=0;i<3;i++){
@@ -1037,28 +1075,19 @@ void campaign_update_moving_rooms(void){
         unsigned home=world.prop_bounds[id].room;
         // Each portal maps between the coordinate frames of its two rooms. A train can
         // cross several before its authored mesh changes owner (or without changing owner).
-        static struct {unsigned room;C3D_Mtx from;} route[128];
         bool visited[128]={0};
-        unsigned tail=1;
-        visited[home]=true;route[0].room=home;Mtx_Identity(&route[0].from);
         static const float identity[12]={1,0,0,0,1,0,0,0,1,0,0,0};
         const float *motion=p->moved?p->matrix:identity;
-        for(unsigned q=0;q<tail;q++){
-            StageRoom *src=world.rooms+route[q].room;
-            for(unsigned k=0;k<src->info.exits;k++){
-                Aperture *a=src->openings+k;unsigned dest=a->exit.room;
-                if(visited[dest] || !through_exit(a,&route[q].from,world.prop_bounds[id].box,motion))continue;
-                C3D_Mtx next;matrix(&next,a->exit.transform);
-                route[tail].room=dest;Mtx_Multiply(&route[tail].from,&next,&route[q].from);
-                GuestMesh **ptr=&world.rooms[dest].guests;
-                while(*ptr && (*ptr)->owner!=home)ptr=&(*ptr)->next;
-                if(!*ptr){
-                    *ptr=calloc(1,sizeof(GuestMesh));if(!*ptr)continue;
-                    (*ptr)->owner=home;(*ptr)->placement=route[tail].from;
-                }
-                set_membership(&(*ptr)->props,id,true);
-                visited[dest]=true;tail++;
+        unsigned count=trace_moving_rooms(home,world.prop_bounds[id].box,motion,UINT32_MAX,visited);
+        for(unsigned q=1;q<count;q++){
+            const MovingRoom *placed=moving_route+q;
+            GuestMesh **ptr=&world.rooms[placed->room].guests;
+            while(*ptr && (*ptr)->owner!=home)ptr=&(*ptr)->next;
+            if(!*ptr){
+                *ptr=calloc(1,sizeof(GuestMesh));if(!*ptr)continue;
+                (*ptr)->owner=home;(*ptr)->placement=placed->from;
             }
+            set_membership(&(*ptr)->props,id,true);
         }
         for(unsigned r=0;r<world.h.rooms;r++)if(!visited[r]){
             for(GuestMesh *g=world.rooms[r].guests;g;g=g->next)
@@ -1143,17 +1172,15 @@ static void draw_layer(const Mesh *mesh,int loc,const C3D_Mtx *view,unsigned mod
         if(mode){
             C3D_Mtx placed;const C3D_Mtx *matrix_ptr=view;
             if(transform>=0){C3D_Mtx m;matrix(&m,prop->matrix);Mtx_Multiply(&placed,view,&m);matrix_ptr=&placed;}
-            const RayBounds *box=mesh->bounds+i;
-            Point center={(box->lo.x+box->hi.x)*.5f,(box->lo.y+box->hi.y)*.5f,(box->lo.z+box->hi.z)*.5f};
             C3D_Tex *diffuse=world.textures+(b.base&TEXTURE_INDEX);
             C3D_Tex *light=world.textures+(b.light?b.light:1);
             if(mode==1 && (b.base&DEPTH_DECAL)){
                 float bias=decal_depth_offset(matrix_ptr,mesh->vertices+at,b.count);
-                alpha_decal(matrix_ptr,center,world.blend_view,(C3D_BufInfo*)&mesh->binding,at,b.count,diffuse,light,bias);
+                alpha_decal(matrix_ptr,world.blend_view,(C3D_BufInfo*)&mesh->binding,at,b.count,diffuse,light,bias);
             }else{
                 AlphaStyle style=mode==2?ALPHA_BEAM:mode==3?ALPHA_BEACON:ALPHA_WORLD;
                 if(mode==1 && (b.base&BLEND_SOLID_CORE))style=front_only?ALPHA_WORLD_DEPTH_CULLED:ALPHA_WORLD_DEPTH;
-                alpha_submit(style,matrix_ptr,center,world.blend_view,(C3D_BufInfo*)&mesh->binding,at,b.count,
+                alpha_submit(style,matrix_ptr,world.blend_view,(C3D_BufInfo*)&mesh->binding,at,b.count,
                              diffuse,light,mode==3?world.beacon_color:0);
             }
             continue;

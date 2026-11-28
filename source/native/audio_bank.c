@@ -69,8 +69,8 @@ static void request_read(Voice *v,unsigned start){
     StreamRead *r=reads+(v-voices);
     if(start>=v->clip->bytes){if(v->clip->flags&1)start=0;else return;}
     LightLock_Lock(&read_lock);
-    bool same=r->clip==v->clip && r->start==start;
-    bool queue=!r->busy && !(same && (r->pending || r->ready || r->failed));
+    bool covered=r->clip==v->clip && start>=r->start && start-r->start<r->bytes;
+    bool queue=!r->busy && !(covered && (r->pending || r->ready || r->failed));
     if(queue){
         r->clip=v->clip;r->start=start;r->bytes=v->clip->bytes-start;
         if(r->bytes>READ_AHEAD)r->bytes=READ_AHEAD;
@@ -206,28 +206,36 @@ void bank_preload(const char *group,const char *name){
         prefix_bytes+=bytes;
     }
 }
-// 1 = copied, 0 = pending, -1 = failed. Pending I/O never cancels the voice.
+// Return the bytes available now, 0 while reading or -1 on I/O failure.
+// A spatial sound can resume mid-block when a door opens. Queue the cached
+// part immediately and let the next DSP buffer start on the stream boundary.
 static int read_voice(Voice *v,void *out,unsigned bytes){
     const CachedAudio *cached=prefixes?prefixes+(v->clip-records):NULL;
-    if(cached && v->offset+bytes<=cached->bytes){
+    if(cached && v->offset<cached->bytes){
+        unsigned available=cached->bytes-v->offset;
+        if(bytes>available)bytes=available;
         memcpy(out,cached->data+v->offset,bytes);
         if(cached->bytes<v->clip->bytes)request_read(v,cached->bytes);
-        return 1;
+        return (int)bytes;
     }
     // Keep consecutive samples from each independent stream across DSP refills.
-    if(v->offset<v->read_start || v->offset+bytes>v->read_start+v->read_bytes){
+    if(v->offset<v->read_start || v->offset>=v->read_start+v->read_bytes){
         StreamRead *r=reads+(v-voices);int result=0;
         LightLock_Lock(&read_lock);
-        if(r->clip==v->clip && r->ready && v->offset>=r->start && v->offset+bytes<=r->start+r->bytes){
-            memcpy(v->read_ahead,r->data,r->bytes);v->read_start=r->start;v->read_bytes=r->bytes;
-            r->ready=false;result=1;
-        }else if(r->clip==v->clip && r->failed)result=-1;
+        if(r->clip==v->clip && v->offset>=r->start && v->offset-r->start<r->bytes){
+            if(r->ready){
+                memcpy(v->read_ahead,r->data,r->bytes);v->read_start=r->start;v->read_bytes=r->bytes;
+                r->ready=false;result=1;
+            }else if(r->failed)result=-1;
+        }
         LightLock_Unlock(&read_lock);
         if(result<=0){if(!result)request_read(v,v->offset);return result;}
     }
-    memcpy(out,v->read_ahead+(v->offset-v->read_start),bytes);
-    if(v->offset+bytes+2*SAMPLES>=v->read_start+v->read_bytes)request_read(v,v->read_start+v->read_bytes);
-    return 1;
+    unsigned start=v->offset-v->read_start,available=v->read_bytes-start;
+    if(bytes>available)bytes=available;
+    memcpy(out,v->read_ahead+start,bytes);
+    if(available-bytes<=2*SAMPLES)request_read(v,v->read_start+v->read_bytes);
+    return (int)bytes;
 }
 static void fill(unsigned slot) {
     Voice *v=voices+slot;if(!v->clip) return;
@@ -245,8 +253,8 @@ static void fill(unsigned slot) {
         int16_t *data=v->samples+v->next*SAMPLES;
         int result=read_voice(v,data,2*n);
         if(result<=0){if(result<0)silence(slot);return;}
-        v->offset+=n*2;DSP_FlushDataCache(data,n*2);
-        *b=(ndspWaveBuf){.data_pcm16=data,.nsamples=n};ndspChnWaveBufAdd(FIRST_CHANNEL+slot,b);
+        v->offset+=(unsigned)result;DSP_FlushDataCache(data,(unsigned)result);
+        *b=(ndspWaveBuf){.data_pcm16=data,.nsamples=(unsigned)result/2};ndspChnWaveBufAdd(FIRST_CHANNEL+slot,b);
         v->next=(v->next+1)%BUFFERS;
     }
 }

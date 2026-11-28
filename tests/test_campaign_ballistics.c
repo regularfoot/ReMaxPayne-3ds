@@ -273,6 +273,16 @@ int main(int argc,char **argv){
             assert(emitted==10);
         }
         retail_bank=argv[1];assert(combat_open());
+        unsigned decals=0;
+        for(unsigned i=0;i<PROJECTILE_LIMIT;i++){
+            const char *type=i&1?"decal_random_bullet":"debris_wood_crate";
+            decals+=combat_launch(type,0,0,muzzle,camera.forward);
+        }
+        assert(decals>0 && decals<PROJECTILE_LIMIT);
+        assert(combat_launch("damage_mine",0,0,muzzle,camera.forward));
+        assert(combat_launch("grenade",0,0,muzzle,camera.forward));
+        assert(combat_launch("enemy_berettadual",0,0,muzzle,camera.forward));
+        assert(combat_valid() && combat_open());
         states[1]=(EntityState){.enabled=true,.room=1,.hp=100,.position={1,0,0}};
         wall_x=2;ground=true;fx=(Effects){0};unsigned before=blood_hits;
         combat_hitscan(0,0,&camera,camera.eye,muzzle,1,5,100,"bullet_beretta",&fx);

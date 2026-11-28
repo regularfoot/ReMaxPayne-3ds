@@ -18,7 +18,7 @@ typedef struct {uint16_t target,op,count,args[7];} Message;
 typedef struct {uint16_t parent,reserved;Point forward,up;} Transform;
 typedef struct {uint32_t first;uint16_t count,reserved;} Track;
 typedef struct {float v[12];} Affine;
-typedef struct {Affine local;uint16_t parent,child,sibling,entity;bool active,blocked,panel,invalid_contact;unsigned stamp;} PropMotion;
+typedef struct {Affine local;uint16_t parent,child,sibling,entity;bool active,blocked,panel,invalid_contact,damaging;unsigned stamp;} PropMotion;
 static const Affine identity={{1,0,0,0,1,0,0,0,1,0,0,0}};
 static PropMotion motion[CAMPAIGN_PROPS];
 typedef struct {char magic[4];uint32_t entities,events,clips,messages,strings,bytes;} ScriptHeader;
@@ -150,6 +150,25 @@ static bool prop_event(const EntityDef *d,unsigned key) {
         if(prog.events[i].type==EV_ENTITY && prog.events[i].key==key && prog.events[i].count) return true;
     return false;
 }
+static bool damaging_motion_event(const EntityDef *d,unsigned key){
+    unsigned activator=text_id("activator"),player=text_id("player"),kill=text_id("c_kill"),
+             damage=text_id("c_causedamage"),health=text_id("c_sethealth");
+    for(unsigned i=d->first_event;i<d->first_event+d->events;i++){
+        const Event *e=prog.events+i;
+        if(e->type!=EV_ENTITY || e->key!=key)continue;
+        for(unsigned j=e->first;j<e->first+e->count;j++){
+            const Message *m=prog.messages+j;
+            if(m->target!=activator && m->target!=player)continue;
+            if(m->op==kill)return true;
+            if(!m->count || (m->op!=damage && m->op!=health))continue;
+            char *end;
+            const char *arg=director_text(m->args[0]);
+            float amount=strtof(arg,&end);
+            if(end!=arg && !*end && (m->op==damage?amount>0:amount<=0))return true;
+        }
+    }
+    return false;
+}
 static bool needs_scripted_opponent(const EntityDef *d){
     const unsigned pickup=text_id("c_pickupweapon"),equip=text_id("c_removeallweapons");
     const unsigned machine=text_id("c_setstatemachine");
@@ -265,8 +284,10 @@ bool director_open(const char *stage,DirectorAction action,FILE *journal) {
             .target=DIRECTOR_NONE,.aim=DIRECTOR_NONE,.pace=1,.pose_clip=DIRECTOR_NONE,.enabled=true,.hp=d.max_health?d.max_health:100};
         if(d.prop!=DIRECTOR_NONE) {
             uint16_t parent=prog.transform?prog.transform[i].parent:DIRECTOR_NONE;
+            bool invalid_contact=prop_event(&d,invalid_move_key);
             motion[d.prop]=(PropMotion){.local=identity,.entity=i,.panel=is_moving_panel(&d),
-                .invalid_contact=prop_event(&d,invalid_move_key),.parent=parent==DIRECTOR_NONE?DIRECTOR_NONE:prog.def[parent].prop,
+                .invalid_contact=invalid_contact,.damaging=invalid_contact && damaging_motion_event(&d,invalid_move_key),
+                .parent=parent==DIRECTOR_NONE?DIRECTOR_NONE:prog.def[parent].prop,
                 .child=DIRECTOR_NONE,.sibling=DIRECTOR_NONE};
         }
         if(d.flags&4) prog.character_count++;
@@ -695,12 +716,12 @@ static Affine clip_transform(unsigned clip_id,float t){
     for(unsigned j=0;j<12;j++)result.v[j]=a[j]+(b[j]-a[j])*mix;
     return result;
 }
-static bool motion_collides(unsigned prop,unsigned room,Affine candidate,unsigned descendants){
+static bool motion_collides(unsigned prop,unsigned room,Affine candidate,unsigned descendants,bool damaging){
     PropMotion *m=motion+prop;const CampaignProp *p=campaign_props+prop;
-    if(p->solid && !p->hidden && motion_blocked(prop,room,p->moved?p->matrix:identity.v,candidate.v))return true;
+    if(p->solid && !p->hidden && motion_blocked(prop,room,p->moved?p->matrix:identity.v,candidate.v,damaging))return true;
     for(unsigned child=m->child;descendants && child!=DIRECTOR_NONE;child=motion[child].sibling){
         if(motion_collides(child,director.state[motion[child].entity].room,
-                           compose_motion(candidate.v,motion[child].local),descendants-1))return true;
+                           compose_motion(candidate.v,motion[child].local),descendants-1,damaging))return true;
     }
     return false;
 }
@@ -708,7 +729,7 @@ static bool prop_motion_blocked(unsigned prop,unsigned room,Affine candidate){
     const PropMotion *m=motion+prop;
     if(m->parent!=DIRECTOR_NONE && campaign_props[m->parent].moved)
         candidate=compose_motion(campaign_props[m->parent].matrix,candidate);
-    return motion_collides(prop,room,candidate,m->invalid_contact?16:0);
+    return motion_collides(prop,room,candidate,m->invalid_contact?16:0,m->damaging);
 }
 void director_tick(float dt) {
     for(unsigned i=0;i<director.count;i++) {
@@ -737,7 +758,7 @@ void director_tick(float dt) {
                 float time=previous_time+(s->time-previous_time)*(step/8.f);
                 blocked=prop_motion_blocked(prop,s->room,clip_transform(s->pose_clip,time/fmaxf(.001f,clip->seconds)));
             }
-            if(!blocked && m->panel && previous_time==0 && !s->reverse && clip->seconds>0){
+            if(!blocked && m->panel && !m->damaging && previous_time==0 && !s->reverse && clip->seconds>0){
                 // Check the full swing before an interactive panel starts opening.
                 for(unsigned step=1;step<=8 && !blocked;step++)
                     blocked=prop_motion_blocked(prop,s->room,clip_transform(s->pose_clip,step/8.f));

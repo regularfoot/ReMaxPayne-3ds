@@ -205,7 +205,7 @@ void scene_pause_step(PauseCamera *o,float dt,CameraTrace trace){
         Point arm={o->radius*sinf(angle),o->height,o->radius*cosf(angle)};
         Camera candidate=o->view;
         if(frame_body(&candidate,o->pivot,arm,trace) && candidate.distance>=hypotf(o->radius,o->height)-.001f){
-            o->angle=angle;o->view=candidate;return;
+            o->angle=angle;o->view=candidate;o->orbiting=true;return;
         }
         o->direction=-o->direction;
     }
@@ -402,11 +402,14 @@ static unsigned body_wall(const Triangle *t,const Player *body,bool airborne,Poi
     unsigned n=clip_height(vertices,3,clipped,body->position.y+(airborne?.035f:.34f),true);
     return clip_height(clipped,n,wall,body->position.y+(body->crouched?1.08f:1.70f),false);
 }
+float scene_overhead_distance(const Triangle *face,const Player *body){
+    Point wall[6];unsigned n=body_wall(face,body,false,wall);
+    return n?wall_distance(wall,n,body->position.x,body->position.z):INFINITY;
+}
 float scene_panel_distance(const Triangle *face,const Player *body){
     Point u=add(face->b,face->a,-1),v=add(face->c,face->a,-1),axis=cross(u,v);
     if(axis.y*axis.y>=.62f*.62f*dot(axis,axis))return INFINITY;
-    Point wall[6];unsigned n=body_wall(face,body,false,wall);
-    return n?wall_distance(wall,n,body->position.x,body->position.z):INFINITY;
+    return scene_overhead_distance(face,body);
 }
 bool scene_panel_blocks(const Triangle *face,const Player *body,Point target,bool airborne){
     Point u=add(face->b,face->a,-1),v=add(face->c,face->a,-1),axis=cross(u,v);

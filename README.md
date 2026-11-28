@@ -2,7 +2,7 @@
 
 ![Max Payne fires two Berettas during a shoot-dodge on the upper screen of a Nintendo 3DS, with the port's touch-screen HUD below.](docs/remaxpayne-3ds-poster.png)
 
-**ReMaxPayne-3ds** is a fan-made native Max Payne port that works on both **Old 3DS and New 3DS** through the Homebrew Launcher. Version **0.1.0** is an early-access source release for testing on real hardware.
+**ReMaxPayne-3ds** is a fan-made native Max Payne port that works on both **Old 3DS and New 3DS** through the Homebrew Launcher. Version **0.1.1** is an early-access source release for testing on real hardware. See the [changelog](CHANGELOG.md) for graphics settings, combat optimizations, and gameplay fixes.
 
 This project is intended for personal use with data from your own copy of Max Payne for Xbox. Build locally from your supported PAL or NTSC disc image. Keep the resulting game data and 3DSX for your own use.
 
@@ -13,6 +13,17 @@ The upper screen shows the third-person campaign, with optional stereoscopic 3D 
 On **Old 3DS**, aim with the D-Pad or drag the stylus across the touch screen. Tap the Bullet Time meter to activate slow motion. On **New 3DS**, the C-Stick adds camera control and **ZL** toggles Bullet Time. The D-Pad and stylus also work on New 3DS.
 
 From the main menu, choose **New Game** to start the campaign or **Tutorial** to try the controls. The campaign supports autosaves and manual save slots. In the pause menu, **X** quicksaves and **Y** quickloads.
+
+### Graphics and aiming settings
+
+Open **Options → Graphics** to select environment and sky texture limits independently. The choices use the mip levels available in your locally converted game data and apply on the next level load.
+
+| Texture limit | Old 3DS | New 3DS |
+| --- | --- | --- |
+| Environment | 128 | Auto (512), 128, 256, 512 |
+| Sky | Auto (128), 128, 256 | Auto (512), 128, 256, 512, 1024 |
+
+Under **Options → Controls**, stick and touch aiming have separate horizontal and vertical sensitivity from **25% to 250%**, in steps of 5%. Gyroscope sensitivity remains independently adjustable on each axis from **25% to 200%**. Hold left or right to adjust repeatedly, or use the touch-screen minus and plus buttons. Existing sensitivity settings migrate when the updated configuration is first loaded.
 
 ### Default campaign controls
 
@@ -59,6 +70,14 @@ The extractor also accepts an MDF containing an XDVDFS image, using the same com
 Use a separate checkout for each disc to keep the generated files separate. To choose the interface language explicitly, export `MP_LANG=en` or `MP_LANG=ru` before packing the assets and running Make. Objective text, narration, and comic pages use the data from your disc.
 
 The campaign build writes `dist/native-full/3ds/maxpayne/maxpayne.3dsx`. Copy it to `3ds/maxpayne/maxpayne.3dsx` on your SD card and run it through the Homebrew Launcher. The game writes saves and settings beside the executable. Set `GAME_DISC` if you extracted the game to a different directory, and `ASSET_PYTHON` if your converters use a separate Python environment. The full 3DSX embeds your locally prepared game data.
+
+When updating to 0.1.1, rerun the asset conversion commands above as well as the native build to regenerate weapon draw runs, particle atlases, and higher-resolution sky mip levels from your disc.
+
+## Testing status
+
+The Alpha Order transparency path was tested in earlier builds on physical 3DS hardware. The final 0.1.1 fixes passed automated host checks, scripted progression through all 67 campaign transitions on PAL and NTSC data, and targeted Old/New 3DS profiles in Azahar. These checks exercise scripts, geometry, menus, saves, and rendering in selected scenes. Physical-console testing of the final combined build is still pending.
+
+Occasional graphical artifacts remain under investigation. Some Xbox cutscene letterboxing commands are also awaiting a verified presentation implementation. Further reports from real hardware are welcome.
 
 ## Credits
 

@@ -68,7 +68,7 @@ bool campaign_npc_passage(uint16_t *room,Point *from,unsigned destination,Point 
 int campaign_crossing(Player *player,Point previous,Point wish,const bool *enabled);
 void campaign_cross(Player *player,const CampaignExit *exit);
 bool campaign_collision(void);
-bool campaign_panel_blocked(unsigned prop,unsigned room,const float *from,const float *to);
+bool campaign_panel_blocked(unsigned prop,unsigned room,const float *from,const float *to,bool damaging);
 bool campaign_contact_frame(unsigned from,unsigned to,Point center,Point *mapped);
 void campaign_panel_contact(const Player *player,bool airborne);
 int campaign_contact(Point point,float radius);

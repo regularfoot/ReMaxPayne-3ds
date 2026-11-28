@@ -26,7 +26,7 @@ def vec(p):
 
 
 def sky_texture(image):
-    return texture(image, max_size=128)
+    return texture(image, max_size=1024)
 
 
 def pack_level(level, config, sky, dest, rules, texture_limit=128):
@@ -244,22 +244,56 @@ def verify_lights(disc, campaign):
     print(f'Point and cone lights verified against the supplied disc across {len(stages)} maps')
 
 
+def cached_sky_matches(path, headers):
+    if not headers:
+        return True
+    try:
+        with path.open('rb') as f:
+            tag, rooms, textures = struct.unpack('<4sII', f.read(12))
+            if tag != b'MPC1':
+                return False
+            f.seek(36)
+            sky, = struct.unpack('<I', f.read(4))
+            f.seek(sky)
+            count, = struct.unpack('<I', f.read(4))
+            if count != len(headers):
+                return False
+            batches = f.read(12 * count)
+            for batch, header in enumerate(headers):
+                texture_id, = struct.unpack_from('<H', batches, batch * 12)
+                if texture_id >= textures:
+                    return False
+                f.seek(36 + 4 * (1 + rooms + texture_id))
+                offset, = struct.unpack('<I', f.read(4))
+                f.seek(offset)
+                if f.read(len(header)) != header:
+                    return False
+    except (OSError, struct.error):
+        return False
+    return True
+
+
 def pack(disc,out,only,force=False,texture_limit=128):
     arcs=archive_root(disc)
     out.mkdir(parents=True,exist_ok=True)
     @lru_cache(None)
     def sky(name):return worldsphere(arcs/'x_data.ras',member,name) if name else []
+    @lru_cache(None)
+    def sky_headers(name):return tuple(sky_texture(image)[:8] for _,image,_ in sky(name))
     for stage in levels(arcs):
         if only and stage['id'] not in only:continue
         dest=out/(stage['id']+'.mpc')
-        if not force and stage['id']!='startup_level' and dest.is_file() and dest.with_suffix('.lights').is_file() and dest.with_suffix('.dlg').is_file():continue
+        name=stage.get('worldsphere')
+        if (not force and stage['id']!='startup_level' and dest.is_file() and dest.with_suffix('.lights').is_file() and
+            dest.with_suffix('.dlg').is_file() and cached_sky_matches(dest,sky_headers(name))):
+            continue
         arc=level_archive(arcs,stage)
         with TemporaryDirectory() as scratch:
             local=Path(scratch)/'stage.ldb'
             local.write_bytes(member(arc,'data/database/levels/'+stage['directory']+'/'+stage['level']))
             data=MaxLDBReader(local).parse()
             partial=dest.with_suffix('.partial')
-            pack_level(data,stage,sky(stage.get('worldsphere')),partial,material_rules(arcs),texture_limit)
+            pack_level(data,stage,sky(name),partial,material_rules(arcs),texture_limit)
             partial.replace(dest)
             pack_lights(data,dest.with_suffix('.lights'))
             del data

@@ -41,8 +41,13 @@ static void open_stage(const char *name){
 }
 static void close_stage(void){free(offsets);fclose(map);director_close();campaign_bounds_close();}
 static unsigned passing_train_prop;
-static bool train_contact(unsigned prop,unsigned room,const float *from,const float *to){
- return prop==passing_train_prop && room==4 && fabsf(from[9]-to[9])>.00001f;
+static bool train_contact(unsigned prop,unsigned room,const float *from,const float *to,bool damaging){
+ return damaging && prop==passing_train_prop && room==4 && fabsf(from[9]-to[9])>.00001f;
+}
+static unsigned hatch_prop;
+static bool hatch_contact(unsigned prop,unsigned room,const float *from,const float *to,bool damaging){
+ (void)from;
+ return damaging && prop==hatch_prop && room==2 && to[10]<=-1.25f;
 }
 int main(void){
  open_stage("part0_level1");
@@ -124,4 +129,18 @@ int main(void){
  assert(director.state[0].dead && director.state[0].hp<=0);
  director_motion_guard(NULL);close_stage();
  puts("A collision in the passing train's motion dispatches its original fatal player event.");
+ open_stage("p3_l5-1");
+ unsigned lift=director_find("::lift::d_lift"),hatch=director_find("::lift::d_hatch");
+ assert(lift<director.count && hatch<director.count);
+ hatch_prop=director.def[hatch].prop;
+ assert(hatch_prop<CAMPAIGN_PROPS && campaign_props[hatch_prop].solid);
+ director_motion_guard(hatch_contact);
+ director_event(lift,EV_ARRIVE,"7");
+ assert(director.state[hatch].clip!=DIRECTOR_NONE);
+ director_tick(1.f/30);
+ assert(!director.state[0].dead);
+ for(unsigned frame=0;frame<8 && !director.state[0].dead;frame++)director_tick(1.f/30);
+ assert(director.state[0].dead);
+ director_motion_guard(NULL);close_stage();
+ puts("The falling lift hatch dispatches its fatal event at contact, after it has started dropping.");
 }

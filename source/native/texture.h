@@ -4,4 +4,5 @@
 #include <stdio.h>
 
 bool native_texture_read(FILE *file,C3D_Tex *tex);
+bool native_texture_read_limit(FILE *file,C3D_Tex *tex,unsigned limit);
 #endif
