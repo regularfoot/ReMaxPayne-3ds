@@ -9,6 +9,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 from pack_native import member
 from xbox_disc import archive_root, language
+from ui_font import font_data
 
 
 def lower_ui(archives, output, locale='ru'):
@@ -23,28 +24,20 @@ def lower_ui(archives, output, locale='ru'):
     rows = np.flatnonzero((np.asarray(bg)[:, :, :3].max(axis=2) > 12).sum(axis=1) > 10)
     bg = bg.crop((0, int(rows[0]), bg.width, int(rows[-1])+1)).resize((320, 72), Image.Resampling.LANCZOS)
     health = picture('hud/bitmaps/Health_icon_background').getchannel('A')
-    health = health.crop(health.getbbox()).resize((23, 51), Image.Resampling.LANCZOS)
+    # Bake directly at HUD size: an intermediate tiny mask blurs the outline
+    # when enlarged again on the console.
+    health = health.crop(health.getbbox()).resize((34, 76), Image.Resampling.LANCZOS)
     font_path = os.getenv('MP_UI_FONT') or next((f for f in (
         '/System/Library/Fonts/Supplemental/Arial Narrow Bold.ttf',
         '/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf',
         '/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf') if Path(f).exists()), None)
     if not font_path:
         raise ValueError('Set MP_UI_FONT to a TrueType font with Latin and Cyrillic glyphs')
-    alphabet = ''.join(chr(c) for c in range(32, 127))+''.join(chr(c) for c in range(1040, 1104))+'Ёё'
     with (output/'lower.ui').open('wb') as f:
-        f.write(b'UI01')
+        f.write(b'UI03')
         f.write(lcd(bg).tobytes())
         f.write(health.tobytes())
-        for size in (15, 20, 24):
-            font = ImageFont.truetype(font_path, size)
-            for c in alphabet:
-                mask = Image.new('L', (26, 32))
-                ImageDraw.Draw(mask).text((0, 0), c, font=font, fill=255)
-                width = max(1, round(font.getlength(c)))
-                if width>mask.width or (mask.getbbox() and mask.getbbox()[3]>=mask.height):
-                    raise ValueError(f'Glyph exceeds atlas cell: {c}')
-                f.write(struct.pack('B',width))
-                f.write(np.packbits(np.asarray(mask)>92, axis=1).tobytes())
+        f.write(font_data(font_path))
     # Original Xbox backgrounds, toggles and slider artwork for the touch menu.
     with (output/'menu.ui').open('wb') as f:
         f.write(struct.pack('<4sIII',b'MNU1',4,320,240))

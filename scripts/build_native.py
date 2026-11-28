@@ -21,6 +21,9 @@ if not all((assets/name).is_file() for name in ('menu.ui','pause.tex','aim.bind'
                                               'street.nav', 'johnny.actor', 'pump.pcm', 'pump_reload.pcm', 'door.pcm', 'cabinet.pcm', 'dose.pcm', 'sniper.pcm', 'sniper_reload.pcm', 'rifle.anim', 'switch.pcm','young.actor','home.room','homephone.room','homeliving.room','homestairs.room',
                                               *(f'page{i}.{ext}' for i in range(3,8) for ext in ('565','pcm')))):
     raise SystemExit('Prepare native assets with scripts/pack_native.py first')
+with (assets/'lower.ui').open('rb') as ui_file:
+    if ui_file.read(4) != b'UI03':
+        raise SystemExit('Rebuild UI assets with scripts/pack_ui.py for the updated HUD')
 build.mkdir(parents=True, exist_ok=True)
 shader = build/'room.shbin'
 subprocess.run([sdk/'tools/bin/picasso','-o',shader,source/'room.v.pica'],check=True)

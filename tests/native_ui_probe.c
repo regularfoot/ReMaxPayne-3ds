@@ -34,6 +34,27 @@ enum GameMode selected_mode;
 static void tap(unsigned x,unsigned y){inputs[steps]=KEY_TOUCH;taps[steps++]=(touchPosition){x,y};inputs[steps++]=0;}
 int main(void){
     assert(ui_init(NULL,false));
+    // Both alphabets retain partial edge coverage at every native font size.
+    for(int px=FONT_FIRST;px<=FONT_LAST;px++){
+        box(0,0,W,H,BLACK);text_px(3,3,px,"Menu / Меню 123",WHITE,200);
+        unsigned softened=0,solid=0;
+        for(int x=0;x<W;x++)for(int y=0;y<H;y++){
+            uint16_t pixel=screen[x*H+H-1-y];
+            softened+=pixel!=BLACK && pixel!=WHITE;solid+=pixel==WHITE;
+        }
+        assert(softened && solid);
+        box(0,0,W,H,BLACK);text_px(-3,-5,px,"Clipping / Обрезка",WHITE,40);
+        for(int x=40;x<W;x++)for(int y=0;y<H;y++)assert(screen[x*H+H-1-y]==BLACK);
+    }
+    // A damaged or stale packed font must fail validation, never read beyond its bitmap.
+    FILE *bad_font=tmpfile();assert(bad_font);
+    uint32_t header[]={FONT_FIRST,FONT_LAST,FONT_COUNT,1};
+    Glyph saved=font[0][0];font[0][0].offset=2;
+    assert(fwrite(header,sizeof header,1,bad_font)==1 && fwrite(font,sizeof font,1,bad_font)==1);
+    rewind(bad_font);assert(!load_font(bad_font));fclose(bad_font);font[0][0]=saved;
+    bad_font=tmpfile();assert(bad_font);header[3]=1024*1024;
+    assert(fwrite(header,sizeof header,1,bad_font)==1 && fwrite(font,sizeof font,1,bad_font)==1);
+    rewind(bad_font);assert(!load_font(bad_font));fclose(bad_font);
     unsigned initial_voice=ui_settings.voice;
     tap(230,172); // Main menu -> Options.
     tap(50,65); // Aim sensitivity.
@@ -94,6 +115,6 @@ int main(void){
     assert(read_current_settings("ui-settings-migration.tmp"));remove("ui-settings-migration.tmp");
     assert(ui_settings.stick_horizontal==175 && ui_settings.voice==preferred);
     assert(change(VOICE,1) && ui_settings.voice!=preferred);
-    puts("Native UI: touch navigation, both settings pages, independent axes, Old texture limits, integer layouts and fixed weapon icon passed");
+    puts("Native UI: antialiased Latin/Cyrillic text, clipping, font validation, touch navigation, settings migration and fixed weapon icon passed");
     return 0;
 }

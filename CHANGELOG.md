@@ -10,6 +10,9 @@ Early-access touch-interface update for Old 3DS and New 3DS. Includes the graphi
 - Show four compact gameplay settings or save slots per page. Add draggable aiming sliders, touch adjustment buttons and full-row toggles.
 - Move captions, notices and journal content to the darker lower edge and keep the loading meter near the bottom.
 - Use native integer pixel coordinates for menu boundaries, lines and touch targets.
+- Render antialiased Latin and Cyrillic text at each final display size throughout menus, the weapon picker and the closed weapon panel, replacing scaled one-bit glyphs.
+- Bake the health silhouette directly at HUD resolution for a sharper outline. Enlarge the chapter label and painkiller count, and vertically center one- or two-line objectives while retaining left alignment.
+- Smooth the enlarged weapon icon without moving or resizing it when its status changes. Wrap long touch-menu labels instead of clipping them.
 - Add the approved compact HUD: enlarged proportional health silhouette, upper-right weapon panel and two-line full-width objective strip. Keep Bullet Time and Crouch at the lower left and move journal access into pause.
 - Keep the enlarged weapon icon at a fixed position and size during reload and empty states. Melee weapons show no ammunition or reload/empty status.
 - Align comic-page, weapon-picker and animation-gallery touch input with the new buttons.
@@ -21,6 +24,7 @@ Early-access touch-interface update for Old 3DS and New 3DS. Includes the graphi
 - Deduplicate identical PCM payloads in the combined bank and retain compatibility with single-language banks.
 - Read existing settings files without losing sensitivity, graphics or control values when adding the voice preference.
 - Allow private objective-translation overlays while keeping disc string tables and translations out of the repository.
+- Regenerate the lower-screen font and silhouette from the local font and personal disc data; reject outdated UI assets during the native build with instructions to rebuild them.
 - Document the optional second-disc build and update the poster to the new HUD and version 0.2.0.
 
 ### Graphics fixes and verification

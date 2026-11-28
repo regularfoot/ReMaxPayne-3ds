@@ -29,6 +29,8 @@ Under **Options → Aim**, stick and touch aiming have separate horizontal and v
 
 The lower-screen menus use large touch tiles and a consistent **Back** button in the upper-right corner. Gameplay options and save slots show four compact rows per page. Loading progress, cutscene captions, notices, and journal text sit near the darker lower edge. Menu edges, hit areas, and lines use whole pixels on the native 320×240 display. Physical button navigation remains available.
 
+Text is antialiased at its final display size in both languages, including the closed weapon panel. The HUD uses a sharper health silhouette, larger chapter and painkiller labels, and left-aligned objectives centered vertically for either one or two lines. Reload and empty indicators keep the weapon icon in the same position and size.
+
 Under **Options → Sound → Voice**, choose Russian or English when both audio sets were prepared from your own discs. Spoken lines and graphic-novel narration follow the selection; the interface, objectives, and original comic lettering keep the language of the base build. A line already playing finishes normally; subsequent sounds and the next comic page use the selected voice. Optional disc videos use an alternate version when supplied by the second disc. A single-language build keeps its original audio.
 
 ### Default campaign controls
@@ -77,7 +79,14 @@ Use a separate checkout for each disc to keep the generated files separate. To c
 
 The campaign build writes `dist/native-full/3ds/maxpayne/maxpayne.3dsx`. Copy it to `3ds/maxpayne/maxpayne.3dsx` on your SD card and run it through the Homebrew Launcher. The game writes saves and settings beside the executable. Set `GAME_DISC` if you extracted the game to a different directory, and `ASSET_PYTHON` if your converters use a separate Python environment. The full 3DSX embeds your locally prepared game data.
 
-When updating from 0.1.0, rerun asset conversion as well as the native build to regenerate weapon draw runs, particle atlases, and sky mip levels. Updating an existing 0.1.1 data set for the new interface only requires recompiling; adding a second voice language also requires the optional conversion below.
+When updating from 0.1.0, rerun asset conversion as well as the native build to regenerate weapon draw runs, particle atlases, and sky mip levels. With an existing 0.1.1 or earlier 0.2.0 data set, regenerate the lower-screen assets before rebuilding so the antialiased fonts and sharper health silhouette match the executable:
+
+```sh
+python3 scripts/pack_ui.py game build/native-assets
+make native-full
+```
+
+Existing campaign data can be reused. Adding a second voice language also requires the optional conversion below.
 
 ### Optional second voice language
 

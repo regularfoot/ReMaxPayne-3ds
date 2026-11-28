@@ -15,11 +15,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { W=320,H=240,FONT_COUNT=161 };
+enum { W=320,H=240,FONT_COUNT=161,FONT_FIRST=8,FONT_LAST=27 };
 enum { BLACK=0x0862, PANEL=0x18e4, LINE=0x3966, MUTED=0x9c71, GREY=0x736e, PAPER=0xf73a,
        WHITE=0xffff, RED=0xa985, ACCENT=0xf30b, DARKRED=0x5082 };
-typedef struct { uint8_t advance,bits[32][4]; } Glyph;
-static struct { uint16_t skyline[72][320]; uint8_t silhouette[51][23]; Glyph font[3][FONT_COUNT]; } art;
+typedef struct { uint32_t offset;uint8_t advance,width,height;int8_t x,y;uint8_t reserved[3]; } Glyph;
+static struct { uint16_t skyline[72][320]; uint8_t silhouette[76][34]; } art;
+static Glyph font[FONT_LAST-FONT_FIRST+1][FONT_COUNT];
+static uint8_t *font_pixels;
+static const int label_sizes[]={15,20,24};
 // Compose in ordinary RAM. Never retain a GSP back-buffer pointer across swaps.
 static _Alignas(32) uint16_t canvas[W*H];
 static uint16_t *const screen=canvas;
@@ -83,60 +86,86 @@ static int character(const unsigned char **cursor) {
     if (value==1025 || value==1105) return 159+(value==1105);
     return '?'-32;
 }
-static void label_to(uint16_t *fb,int x,int y,int size,const char *str,uint16_t color,int right) {
-    const unsigned char *s=(const unsigned char *)str;
-    int height=size==0?20:size==1?26:30;
-    while (*s) {
-        const Glyph *g=&art.font[size][character(&s)];
-        if (x+g->advance>right) break;
-        for (int j=0;j<height && y+j<H;j++) for (int i=0;i<g->advance;i++)
-            if (x+i>=0 && y+j>=0 && i<32 && (g->bits[j][i/8]&(128>>(i&7)))) fb[(x+i)*H+H-1-y-j]=color;
+static uint16_t mix565(uint16_t back,uint16_t color,unsigned alpha){
+    if(alpha==255)return color;
+    unsigned red=(((back>>11)&31)*(255-alpha)+((color>>11)&31)*alpha+127)/255;
+    unsigned green=(((back>>5)&63)*(255-alpha)+((color>>5)&63)*alpha+127)/255;
+    unsigned blue=((back&31)*(255-alpha)+(color&31)*alpha+127)/255;
+    return (red<<11)|(green<<5)|blue;
+}
+static const Glyph *glyph_at(int px,int index){
+    if(px<FONT_FIRST)px=FONT_FIRST;
+    if(px>FONT_LAST)px=FONT_LAST;
+    return &font[px-FONT_FIRST][index];
+}
+// Each size is rasterized directly from the outline, retaining edge coverage.
+// Menu geometry and glyph origins still land on whole LCD pixels.
+static int text_width(const char *text,int px){
+    const unsigned char *p=(const unsigned char*)text;int width=0;
+    while(*p)width+=glyph_at(px,character(&p))->advance;
+    return width;
+}
+static void text_to(uint16_t *fb,int x,int y,int px,const char *text,uint16_t color,int right){
+    const unsigned char *p=(const unsigned char*)text;
+    int limit=fb==screen?W:400;if(right>limit)right=limit;
+    while(*p){
+        const Glyph *g=glyph_at(px,character(&p));
+        if(x+g->advance>right)break;
+        const uint8_t *pixels=font_pixels+g->offset;
+        for(int row=0;row<g->height;row++)for(int col=0;col<g->width;col++){
+            int a=x+g->x+col,b=y+g->y+row;unsigned alpha=pixels[row*g->width+col];
+            if(alpha && a>=0 && a<right && b>=0 && b<H){
+                uint16_t *pixel=fb+a*H+H-1-b;*pixel=mix565(*pixel,color,alpha);
+            }
+        }
         x+=g->advance;
     }
+}
+static void text_px(int x,int y,int px,const char *text,uint16_t color,int right){
+    text_to(screen,x,y,px,text,color,right);
+}
+static void label_to(uint16_t *fb,int x,int y,int size,const char *str,uint16_t color,int right){
+    text_to(fb,x,y,label_sizes[size],str,color,right);
 }
 static void label(int x,int y,int size,const char *str,uint16_t color,int right){
     label_to(screen,x,y,size,str,color,right);
 }
-// One font atlas serves menus and HUD at their approved pixel sizes.
-static int text_width(const char *text,int px){
-    const unsigned char *p=(const unsigned char*)text;int width=0;
-    while(*p)width+=art.font[0][character(&p)].advance;
-    return (width*px+7)/15;
-}
-static void text_px(int x,int y,int px,const char *text,uint16_t color,int right){
-    const unsigned char *p=(const unsigned char*)text;int advance=0;
-    while(*p){
-        const Glyph *g=&art.font[0][character(&p)];
-        int left=x+(advance*px+7)/15;advance+=g->advance;
-        int width=x+(advance*px+7)/15-left,height=(20*px+14)/15;
-        if(left+width>right)break;
-        for(int row=0;row<height;row++)for(int col=0;col<width;col++){
-            int a=col*15/px,b=row*15/px;
-            if(a<32 && b<32 && (g->bits[b][a/8]&(128>>(a&7))))box(left+col,y+row,1,1,color);
-        }
-    }
-}
 static void centered(int x,int y,int w,int px,const char *text,uint16_t color){
     text_px(x+(w-text_width(text,px))/2,y,px,text,color,x+w);
 }
-static int wrap_px(int x,int y,int right,int px,const char *text,int lines,int pitch,uint16_t color){
+typedef struct {int top,bottom;} TextBounds;
+static int wrap_layout(int x,int y,int right,int px,const char *text,int lines,int pitch,uint16_t color,TextBounds *bounds){
     const unsigned char *p=(const unsigned char*)text;int used=0;
+    if(bounds)*bounds=(TextBounds){H,0};
     while(*p && used<lines){
         const unsigned char *end=p,*space=NULL;int width=0;
         while(*end && *end!='\n'){
             const unsigned char *next=end;int glyph=character(&next);
-            width+=art.font[0][glyph].advance;
-            if((width*px+7)/15>right-x || next-p>=255)break;
+            width+=glyph_at(px,glyph)->advance;
+            if(width>right-x || next-p>=255)break;
             if(*end==' ')space=end;
             end=next;
         }
         if(*end && *end!='\n' && space && space>p)end=space;
         if(end==p)break;
         char line[256];size_t n=end-p;memcpy(line,p,n);line[n]=0;
-        text_px(x,y+used*pitch,px,line,color,right);used++;
+        if(bounds){
+            const unsigned char *letter=(const unsigned char*)line;
+            while(*letter){
+                const Glyph *g=glyph_at(px,character(&letter));if(!g->height)continue;
+                int top=used*pitch+g->y,bottom=top+g->height;
+                if(top<bounds->top)bounds->top=top;
+                if(bottom>bounds->bottom)bounds->bottom=bottom;
+            }
+        }else text_px(x,y+used*pitch,px,line,color,right);
+        used++;
         p=end;if(*p=='\n')p++;while(*p==' ')p++;
     }
+    if(bounds && !bounds->bottom)bounds->top=0;
     return used;
+}
+static int wrap_px(int x,int y,int right,int px,const char *text,int lines,int pitch,uint16_t color){
+    return wrap_layout(x,y,right,px,text,lines,pitch,color,NULL);
 }
 static bool inside(TouchRect r,int x,int y){return x>=r.x && x<r.x+r.w && y>=r.y && y<r.y+r.h;}
 static const TouchRect back_rect={234,8,76,34};
@@ -150,8 +179,7 @@ static void menu_background(unsigned background){
 }
 void ui_pause_image(uint16_t *fb){
     for(unsigned i=0;i<400*H;i++)fb[i]=(fb[i]>>1)&0x7bef;
-    const char *word=MP_TEXT("ПАУЗА","PAUSE");const unsigned char *s=(const unsigned char*)word;unsigned width=0;
-    while(*s)width+=art.font[2][character(&s)].advance;
+    const char *word=MP_TEXT("ПАУЗА","PAUSE");unsigned width=text_width(word,label_sizes[2]);
     int x=(400-width)/2;
     label_to(fb,x+1,106,2,word,BLACK,400);label_to(fb,x,105,2,word,WHITE,400);
 }
@@ -161,9 +189,10 @@ static int paragraph_step(int x,int y,int size,const char *text,int lines,uint16
         const unsigned char *end=line,*space=NULL;int width=0;
         while(*end){
             const unsigned char *next=end;int glyph=character(&next);
-            if(width+art.font[size][glyph].advance>309-x || (size_t)(next-line)>=255)break;
+            unsigned advance=glyph_at(label_sizes[size],glyph)->advance;
+            if(width+(int)advance>309-x || (size_t)(next-line)>=255)break;
             if(*end==' ')space=end;
-            width+=art.font[size][glyph].advance;end=next;
+            width+=advance;end=next;
         }
         if(*end && space && space>line)end=space;
         if(end==line)break;
@@ -252,16 +281,29 @@ static void read_settings(void){
        (format==EOF || (bytes==legacy_size && format==1 && fgetc(file)==EOF)) && valid_settings(&s))ui_settings=s;
     fclose(file);
 }
+static bool load_font(FILE *file){
+    uint32_t header[4];
+    _Static_assert(sizeof(Glyph)==12,"UI glyph layout");
+    if(fread(header,sizeof header,1,file)!=1 || header[0]!=FONT_FIRST || header[1]!=FONT_LAST ||
+       header[2]!=FONT_COUNT || !header[3] || header[3]>1024*1024 || fread(font,sizeof font,1,file)!=1)return false;
+    for(unsigned size=0;size<=FONT_LAST-FONT_FIRST;size++)for(unsigned i=0;i<FONT_COUNT;i++){
+        const Glyph *g=&font[size][i];
+        if(!g->advance || g->advance>64 || g->width>64 || g->height>48 ||
+           g->offset>header[3] || (unsigned)g->width*g->height>header[3]-g->offset)return false;
+    }
+    uint8_t *pixels=malloc(header[3]);if(!pixels)return false;
+    if(fread(pixels,header[3],1,file)!=1 || fgetc(file)!=EOF){free(pixels);return false;}
+    free(font_pixels);font_pixels=pixels;return true;
+}
 bool ui_init(uint16_t *fb,bool enhanced) {
     (void)fb;new_model=enhanced;
     gfxSetDoubleBuffering(GFX_BOTTOM,true);
     FILE *file=fopen("romfs:/lower.ui","rb");
     if (!file) return false;
     char tag[4];
-    _Static_assert(sizeof(Glyph)==129,"UI asset layout");
-    bool ok=fread(tag,4,1,file)==1 && !memcmp(tag,"UI01",4) &&
+    bool ok=fread(tag,4,1,file)==1 && !memcmp(tag,"UI03",4) &&
         fread(art.skyline,sizeof art.skyline,1,file)==1 && fread(art.silhouette,sizeof art.silhouette,1,file)==1 &&
-        fread(art.font,sizeof art.font,1,file)==1 && fgetc(file)==EOF;
+        load_font(file);
     fclose(file);
     file=fopen("romfs:/weapons.ui","rb");
     if(!file)return false;
@@ -527,7 +569,8 @@ static void draw_menu(enum Page page,int selected,int top,bool paused,int card){
         if(page==ROOT && paused && i==2)name=MP_TEXT("Новая игра","New Game");
         if(e->action!=CHANGE){
             int px=page==ROOT?17:16;
-            if(page==SETS || page==DIFFICULTY || page==OPTIONS)wrap_px(r.x+10,r.y+5,r.x+r.w-8,px,name,2,18,color);
+            if(page==SETS || page==DIFFICULTY || page==OPTIONS ||
+               (r.h>=42 && text_width(name,px)>r.w-18))wrap_px(r.x+10,r.y+5,r.x+r.w-8,px,name,2,18,color);
             else text_px(r.x+10,r.y+(r.h-22)/2,px,name,color,r.x+r.w-8);
             if(e->action==PRESET && e->argument==ui_settings.scheme)box(r.x+r.w-6,r.y+4,3,r.h-8,ACCENT);
             continue;
@@ -732,35 +775,48 @@ static int last_dir=-1,last_distance=-1;
 static unsigned hud_ammo,hud_reserve,hud_zoom;
 static bool hud_reloading;
 static char hud_weapon_name[96];
+static unsigned scaled_alpha(const uint8_t *pixels,int sw,int sh,int dw,int dh,int col,int row){
+    int x=(2*col+1)*sw*128/dw-128,y=(2*row+1)*sh*128/dh-128;
+    if(x<0)x=0;
+    if(y<0)y=0;
+    if(x>(sw-1)*256)x=(sw-1)*256;
+    if(y>(sh-1)*256)y=(sh-1)*256;
+    unsigned fx=x&255,fy=y&255;int a=x/256,b=y/256,c=a+1<sw?a+1:a,d=b+1<sh?b+1:b;
+    unsigned top=pixels[b*sw+a]*(256-fx)+pixels[b*sw+c]*fx;
+    unsigned bottom=pixels[d*sw+a]*(256-fx)+pixels[d*sw+c]*fx;
+    return (top*(256-fy)+bottom*fy+32768)>>16;
+}
 void ui_hud(const char *area,const char *objective,const char *weapon_name,unsigned health,unsigned pills,int weapon,
             unsigned ammo,unsigned reserve,bool reloading,unsigned zoom,bool can_switch,unsigned round,unsigned remaining,bool force_prompt){
     static const char *names[]={MP_TEXT("Беретта","Beretta"),MP_TEXT("Дробовик","Pump Shotgun"),MP_TEXT("Винтовка","Rifle")};
     char text[80];box(0,0,W,H,BLACK);
-    centered(10,16,92,11,area,MUTED);
+    int chapter_px=14;
+    while(chapter_px>12 && text_width(area,chapter_px)>102)chapter_px--;
+    centered(6,14,102,chapter_px,area,PAPER);
     box(114,8,196,32,PANEL);
     snprintf(hud_weapon_name,sizeof hud_weapon_name,"%s",weapon<0?MP_TEXT("Без оружия","Unarmed"):weapon_name?weapon_name:names[weapon<3?weapon:0]);
     hud_ammo=ammo;hud_reserve=reserve;hud_reloading=reloading;hud_zoom=zoom;
     box(114,84,196,147,0x1082);
     if(ui_settings.tips || force_prompt || !health){
-        box(10,42,300,36,PANEL);wrap_px(18,42,302,15,objective,2,16,PAPER);
+        TextBounds bounds;
+        wrap_layout(18,0,302,15,objective,2,16,PAPER,&bounds);
+        int y=42+(36-(bounds.bottom-bounds.top))/2-bounds.top;
+        box(10,42,300,36,PANEL);wrap_px(18,y,302,15,objective,2,16,PAPER);
     }
     health=health>100?100:health;
-    for(int y=0;y<76;y++)for(int x=0;x<34;x++)if(art.silhouette[y*51/76][x*23/34]>85)
-        box(10+x,84+y,1,1,y<76-(int)(health*76/100)?RED:PAPER);
+    for(int y=0;y<76;y++)for(int x=0;x<34;x++){
+        unsigned alpha=art.silhouette[y][x];
+        uint16_t *pixel=screen+(10+x)*H+H-1-84-y;
+        *pixel=mix565(*pixel,y<76-(int)(health*76/100)?RED:PAPER,alpha);
+    }
     snprintf(text,sizeof text,"%u",health);text_px(52,94,27,text,health?WHITE:ACCENT,102);
     text_px(52+text_width(text,27),105,12,"%",PAPER,104);
-    snprintf(text,sizeof text,"+ %u",pills);text_px(53,129,14,text,pills?PAPER:GREY,102);
+    snprintf(text,sizeof text,"+ %u",pills);text_px(53,128,20,text,pills?PAPER:GREY,102);
     if(round || remaining){
         snprintf(text,sizeof text,MP_TEXT("Раунд %u / Целей %u","Round %u / Targets %u"),round,remaining);
         text_px(120,212,12,text,ACCENT,304);
     }
     (void)can_switch;last_dir=last_distance=-1;flush();
-}
-static uint16_t mix565(uint16_t back,uint16_t color,unsigned alpha){
-    unsigned red=(((back>>11)&31)*(255-alpha)+((color>>11)&31)*alpha)/255;
-    unsigned green=(((back>>5)&63)*(255-alpha)+((color>>5)&63)*alpha)/255;
-    unsigned blue=((back&31)*(255-alpha)+(color&31)*alpha)/255;
-    return (red<<11)|(green<<5)|blue;
 }
 static void weapon_icon(int x,int y,int gun,uint16_t color){
     if(gun<0 || gun>=15)return;
@@ -777,7 +833,7 @@ static void weapon_icon_scaled(int x,int y,int width,int height,int gun,uint16_t
     int w=width,h=width*24/64;if(h>height){h=height;w=height*64/24;}
     x+=(width-w)/2;y+=(height-h)/2;
     for(int row=0;row<h;row++)for(int col=0;col<w;col++){
-        unsigned alpha=weapon_art[gun][row*24/h][col*64/w];
+        unsigned alpha=scaled_alpha(&weapon_art[gun][0][0],64,24,w,h,col,row);
         if(alpha && x+col>=0 && x+col<W && y+row>=0 && y+row<H){
             uint16_t *pixel=screen+(x+col)*H+H-1-y-row;*pixel=mix565(*pixel,color,alpha);
         }
@@ -789,17 +845,19 @@ WeaponChoice ui_weapon_input(bool pressed,int x,int y,bool enabled,uint32_t owne
 void ui_weapon_close(void){weapon_picker.open=false;}
 void ui_weapon_palette(uint32_t owned,uint32_t loaded,int current){
     TouchRect r=touch_rects[TOUCH_WEAPON];box(r.x,r.y,r.w,r.h,PANEL);
-    int lines=text_width(hud_weapon_name,11)>50?2:1;
-    wrap_px(122,lines==2?10:16,172,11,hud_weapon_name,2,11,MUTED);
+    const char *name=current==9?MP_TEXT("Снайперка","Sniper Rifle"):
+        current==13?MP_TEXT("Молотов","Molotov"):hud_weapon_name;
+    int lines=text_width(name,11)>50?2:1;
+    wrap_px(122,lines==2?10:16,172,11,name,2,11,PAPER);
     weapon_icon_scaled(174,5,76,26,current,PAPER);
     bool ammunition=current>=0 && current!=10 && current!=11;
     if(ammunition){
         char rounds[16],spare[24];snprintf(rounds,sizeof rounds,"%u",hud_ammo);snprintf(spare,sizeof spare," / %u",hud_reserve);
         int sw=text_width(spare,14),rw=text_width(rounds,22),x=302-sw-rw;
         text_px(x,12,22,rounds,WHITE,302-sw);text_px(302-sw,19,14,spare,MUTED,302);
-        if(hud_reloading)centered(174,30,76,8,MP_TEXT("ПЕРЕЗАРЯДКА","RELOADING"),ACCENT);
-        else if(!hud_ammo)centered(174,30,76,8,MP_TEXT("НЕТ ПАТРОНОВ","EMPTY"),ACCENT);
-        else if(current==9 && hud_zoom){char zoom[16];snprintf(zoom,sizeof zoom,"%ux",hud_zoom);centered(174,30,76,8,zoom,MUTED);}
+        if(hud_reloading)centered(174,29,76,9,MP_TEXT("ПЕРЕЗАРЯДКА","RELOADING"),ACCENT);
+        else if(!hud_ammo)centered(174,29,76,9,MP_TEXT("НЕТ ПАТРОНОВ","EMPTY"),ACCENT);
+        else if(current==9 && hud_zoom){char zoom[16];snprintf(zoom,sizeof zoom,"%ux",hud_zoom);centered(174,29,76,9,zoom,MUTED);}
     }
     if(weapon_picker.open){
         box(0,0,320,240,BLACK);
