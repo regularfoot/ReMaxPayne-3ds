@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.2.0 — 2026-11-28
+
+Early-access touch-interface update for Old 3DS and New 3DS. Includes the graphics, performance, combat and collision fixes listed under 0.1.1.
+
+### Lower screen and menus
+
+- Replace list menus with large touch tiles and a shared upper-right Back target; retain physical navigation.
+- Show four compact gameplay settings or save slots per page. Add draggable aiming sliders, touch adjustment buttons and full-row toggles.
+- Move captions, notices and journal content to the darker lower edge and keep the loading meter near the bottom.
+- Use native integer pixel coordinates for menu boundaries, lines and touch targets.
+- Add the approved compact HUD: enlarged proportional health silhouette, upper-right weapon panel and two-line full-width objective strip. Keep Bullet Time and Crouch at the lower left and move journal access into pause.
+- Keep the enlarged weapon icon at a fixed position and size during reload and empty states. Melee weapons show no ammunition or reload/empty status.
+- Align comic-page, weapon-picker and animation-gallery touch input with the new buttons.
+
+### Voice audio and build tools
+
+- Add Russian/English voice selection under Sound when both languages are prepared from personal disc data. Keep interface text and comic lettering in the base language.
+- Select subsequent speech without interrupting active playback or restarting audio streams. Select comic narration on each new page; optionally include alternate disc videos.
+- Deduplicate identical PCM payloads in the combined bank and retain compatibility with single-language banks.
+- Read existing settings files without losing sensitivity, graphics or control values when adding the voice preference.
+- Allow private objective-translation overlays while keeping disc string tables and translations out of the repository.
+- Document the optional second-disc build and update the poster to the new HUD and version 0.2.0.
+
+### Graphics fixes and verification
+
+- Retain the console-tested Alpha Order path and normal campaign sky fog. Includes the fixes for reported transparency/flicker regressions, explosion sprite squares, shotgun overlaps, glass masks and misplaced weapon smoke from 0.1.1.
+- Host checks cover touch routing, settings pages, integer layouts, fixed icon pixels, voice-bank conversion/selection, scene controls, ballistics and navigation. Old 3DS Azahar checks cover touch menus, settings and a saved campaign HUD.
+- The complete 0.2.0 release still requires physical-console verification; remaining hardware-specific artifacts and cutscene letterboxing are not claimed resolved.
+
 ## 0.1.1 — 2026-11-28
 
 Early-access source update for Old 3DS and New 3DS.

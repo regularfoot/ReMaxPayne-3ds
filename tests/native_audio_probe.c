@@ -50,7 +50,7 @@ int main(void){
   assert(voices[1].samples==memory && voices[1].read_ahead==ahead);
   variants++;
  }
- assert(variants==11 && host_linear_allocations==VOICE_COUNT);
+ assert(variants==(voice_languages==3?22u:11u) && host_linear_allocations==VOICE_COUNT);
  bank_clear();assert(!host_linear_frees && !prefix_bytes);
  // Simulate a slow FS operation on the stream worker. Frame ticks must keep
  // returning without reading disk or killing the waiting music channel.

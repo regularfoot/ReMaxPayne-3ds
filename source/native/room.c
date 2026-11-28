@@ -622,7 +622,9 @@ void room_animation_gallery(void){
         hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();
         if(down&(KEY_B|KEY_START))break;
         int step=(down&KEY_DRIGHT)?1:(down&KEY_DLEFT)?-1:(down&KEY_R)?10:(down&KEY_L)?-10:0;
-        if(down&KEY_TOUCH){touchPosition pos;hidTouchRead(&pos);if(pos.py>=153 && pos.py<190)step=pos.px<160?-1:1;}
+        if(down&KEY_TOUCH){touchPosition pos;hidTouchRead(&pos);
+            if(pos.px>=234 && pos.px<310 && pos.py>=8 && pos.py<42)break;
+            if(pos.py>=153 && pos.py<190)step=pos.px<160?-1:1;}
         if(step){clip=1+((int)clip-1+step+(int)total)%(int)total;seconds=0;ui_animation_card(pose_bank_name(clip),clip,total);}
         u64 now=svcGetSystemTick();float dt=fminf(.08f,(now-previous)/(float)SYSCLOCK_ARM11);previous=now;
         seconds=fmodf(seconds+dt,pose_bank_duration(clip));yaw+=dt*(!!(held&KEY_DUP)-!!(held&KEY_DDOWN));

@@ -1,3 +1,4 @@
+#include "language.h"
 #include "campaign_file.h"
 #include "audio_bank.h"
 #include "director.h"
@@ -33,6 +34,14 @@ static CachedAudio *prefixes;
 enum { PREFIX_BYTES=2*SAMPLES*BUFFERS, PREFIX_LIMIT=1024*1024, SHORT_CLIP_BYTES=32*1024 };
 static unsigned prefix_bytes;
 static unsigned record_count;
+enum { VOICE_RU=0x100, VOICE_EN=0x200, VOICE_MASK=0x300 };
+static unsigned voice_languages;
+unsigned bank_voice_languages(void){return voice_languages?voice_languages:MP_TEXT(1u,2u);}
+FILE *bank_voice_file(const char *relative){
+    char path[192];
+    if(!relative || snprintf(path,sizeof path,"voice/%s/%s",ui_settings.voice?"en":"ru",relative)>=(int)sizeof path)return NULL;
+    FILE *file=campaign_file(path);return file?file:campaign_file(relative);
+}
 static Voice voices[VOICE_COUNT];
 enum { READ_AHEAD=16*1024 };
 typedef struct {
@@ -102,6 +111,12 @@ bool bank_open(void) {
         if(!memchr(r->key,0,sizeof r->key) || !r->bytes || (r->bytes&1) || size<0 || r->at>(unsigned long)size ||
            r->bytes>(unsigned long)size-r->at || (i && strcmp(r[-1].key,r->key)>0)) goto fail;
     }
+    voice_languages=0;
+    for(unsigned i=0;i<record_count;i++){
+        if(records[i].flags&VOICE_RU)voice_languages|=1;
+        if(records[i].flags&VOICE_EN)voice_languages|=2;
+    }
+    if(!(bank_voice_languages()&(1u<<ui_settings.voice)))ui_settings.voice=bank_voice_languages()&1?0:1;
     if(R_FAILED(ndspInit()))goto fail;
     ready=true;
     prefixes=calloc(record_count,sizeof(*prefixes));
@@ -145,14 +160,21 @@ void bank_close(void) {
     }
     if(ready) ndspExit();
     if(bank) fclose(bank);
-    free(prefixes);prefixes=NULL;free(records);bank=NULL;records=NULL;record_count=0;ready=paused=false;
+    free(prefixes);prefixes=NULL;free(records);bank=NULL;records=NULL;record_count=0;voice_languages=0;ready=paused=false;
 }
 static const Record *find_clip(const char *key) {
     unsigned lo=0,hi=record_count;
     while(lo<hi){unsigned mid=(lo+hi)/2;if(strcmp(records[mid].key,key)<0)lo=mid+1;else hi=mid;}
     if(lo==record_count || strcmp(records[lo].key,key))return NULL;
     unsigned limit=lo+1;while(limit<record_count && !strcmp(records[limit].key,key))limit++;
-    return records+lo+rand()%(limit-lo);
+    unsigned preferred=ui_settings.voice?VOICE_EN:VOICE_RU,count=0;
+    for(unsigned i=lo;i<limit;i++)if(!(records[i].flags&VOICE_MASK) || (records[i].flags&preferred))count++;
+    if(!count)return records+lo+rand()%(limit-lo);
+    unsigned choice=rand()%count;
+    for(unsigned i=lo;i<limit;i++)if(!(records[i].flags&VOICE_MASK) || (records[i].flags&preferred)){
+        if(!choice--)return records+i;
+    }
+    return records+lo;
 }
 static double sound_time(void){
     uint64_t now=svcGetSystemTick();

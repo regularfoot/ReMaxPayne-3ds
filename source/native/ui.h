@@ -4,12 +4,13 @@
 #include <stdint.h>
 #include "touch.h"
 
-typedef enum { UI_RESUME, UI_TUTORIAL, UI_CAMPAIGN, UI_TITLE, UI_EXIT, UI_LOAD, UI_SAVE, UI_BONUS, UI_ORIGINAL_TUTORIAL, UI_ANIMATIONS } UiChoice;
+typedef enum { UI_RESUME, UI_TUTORIAL, UI_CAMPAIGN, UI_TITLE, UI_EXIT, UI_LOAD, UI_SAVE, UI_BONUS, UI_ORIGINAL_TUTORIAL, UI_ANIMATIONS, UI_JOURNAL } UiChoice;
 typedef struct {
     unsigned char horizontal,vertical,deadzone,volume,inverted,tips,music,scheme,reticle,autoaim,lock,autoswitch,slow_assist,recenter,quickaim,gyro;
     unsigned char gyro_horizontal,gyro_vertical;
     unsigned char stick_horizontal,stick_vertical,touch_horizontal,touch_vertical;
     unsigned char world_textures,sky_textures;
+    unsigned char voice;
 } UiSettings;
 extern UiSettings ui_settings;
 bool ui_touch_shortcuts(void);

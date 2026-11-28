@@ -2,6 +2,7 @@
 import argparse
 import json
 import mmap
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -69,6 +70,22 @@ def loading_screens(disc,source,out):
             write_screen(ras.member_bytes(data,entries[key]),dest/(level['id']+'.565'),comic=True,preserve_aspect=name=='p0l0.dds')
 
 
+def apply_objective_translation(table, path):
+    """Optional user-supplied UTF-8 key/TAB/text overlay; no game text is bundled."""
+    for number, line in enumerate(Path(path).read_text(encoding='utf-8').splitlines(), 1):
+        if not line or line.startswith('#'):
+            continue
+        if '\t' not in line:
+            raise ValueError(f'Expected a tab on translation line {number}')
+        key, text = line.split('\t', 1)
+        if not re.fullmatch(r'[a-z0-9_-]{1,100}', key) or '\0' in text:
+            raise ValueError(f'Invalid translation line {number}')
+        target = table/(key+'.txt')
+        if not target.is_file():
+            raise ValueError(f'Translation key is absent from the supplied disc: {key}')
+        target.write_text(text+'\n', encoding='utf-8')
+
+
 def pack(disc,source,out):
     locale=language(disc)
     english=locale=='en'
@@ -107,6 +124,8 @@ def pack(disc,source,out):
     for key,body in re.findall(r'^\[(\w+)\]\s*String\s*=\s*"([^"]*)"',strings,re.M|re.I):
         key = key.lower()
         (table / (key + '.txt')).write_text(format_controls(key, body) + '\n', encoding='utf-8')
+    if path := os.getenv('MP_OBJECTIVE_TRANSLATION'):
+        apply_objective_translation(table, path)
     from pack_campaign_text import pack as pack_text
     pack_text(out)
     print(f'{len(list(pages.glob("*.565")))} pages, {len(list(pages.glob("*.pcm")))} narrations')

@@ -81,7 +81,7 @@ static bool read_pages(unsigned first,unsigned last,const char *const *names,FIL
         ComicView view=zoom?COMIC_ZOOM_AVAILABLE:COMIC_PAGE;
         if (voice.pcm) {
             strcpy(strrchr(path,'.'),".pcm");
-            voice.file=names?campaign_file(path):fopen(path,"rb");
+            voice.file=names?bank_voice_file(path):fopen(path,"rb");
             voice.next=0;
             for (unsigned i=0;i<BUFFERS;i++) voice.wave[i]=(ndspWaveBuf){0};
             fill_audio(&voice);
@@ -96,9 +96,9 @@ static bool read_pages(unsigned first,unsigned last,const char *const *names,FIL
             u32 down=hidKeysDown();
             if(down&KEY_TOUCH) {
                 touchPosition tap;hidTouchRead(&tap);
-                if(tap.px>=8 && tap.px<312 && tap.py>=77 && tap.py<133) down|=KEY_A;
-                if(tap.px>=8 && tap.px<312 && tap.py>=144 && tap.py<198) down|=KEY_B;
-                if(zoom && tap.py>=215)down|=KEY_X;
+                if(tap.px>=10 && tap.px<310 && tap.py>=128 && tap.py<168) down|=KEY_A;
+                if(tap.px>=10 && tap.px<310 && tap.py>=180 && tap.py<220) down|=KEY_B;
+                if(zoom && tap.py>=223)down|=KEY_X;
             }
             if(zoom && (down&KEY_X)){
                 if(!pixels){

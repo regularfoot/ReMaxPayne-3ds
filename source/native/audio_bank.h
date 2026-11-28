@@ -2,7 +2,10 @@
 #define MP_AUDIO_BANK_H
 #include "room.h"
 #include <stddef.h>
+#include <stdio.h>
 bool bank_open(void);
+unsigned bank_voice_languages(void);
+FILE *bank_voice_file(const char *relative);
 void bank_close(void);
 void bank_time_scale(float scale);
 void bank_music_level(float level);

@@ -1,4 +1,5 @@
 #include "language.h"
+#include "version.h"
 #include "campaign_file.h"
 #include "render.h"
 #include "phone.h"
@@ -193,6 +194,9 @@ static bool play_level(bool house,UiChoice *next) {
             TutorialPause pause={.player=&p,.animation=&animation,.effects=&effects,.mission=&mission,.entry=camera,.zoom=rendered_zoom};
             scene_pause_begin(&pause.orbit,&camera,&p);
             UiChoice action=ui_pause_menu(false,tutorial_pause_frame,&pause);
+            if(action==UI_JOURNAL){
+                const char items[3][96]={{0}};ui_journal(prompt,items,"");action=UI_RESUME;
+            }
             if(action!=UI_RESUME){*next=action;break;}
             if(sound) {for(int ch=0;ch<3;ch++) ndspChnSetPaused(ch,false);phone_volume();}
             gyro_prepare(ui_settings.gyro);
@@ -469,7 +473,7 @@ int main(void) {
     if (enhanced) osSetSpeedupEnable(true);
     mkdir("sdmc:/3ds/maxpayne",0777);
     journal=async_log_open("sdmc:/3ds/maxpayne/native.log");
-    if(journal)fputs("BUILD comics-old-20261126 async_io=1\n",journal);
+    if(journal)fputs("BUILD " MP_VERSION " touch_ui=1 selectable_voice=1 async_io=1\n",journal);
     bool mounted=R_SUCCEEDED(romfsInit());
     bool ready=mounted && ui_init((u16*)gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,NULL,NULL),enhanced) && ui_title();
     if (ready) {

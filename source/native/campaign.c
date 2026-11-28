@@ -1479,7 +1479,7 @@ static void hud(bool reloading) {
     ui_hud(chapter,director.state[0].dead?MP_TEXT("A   Продолжить","A   Continue"):caption?message:task,gun>=0?guns[gun].title:NULL,
            (unsigned)fmaxf(0,ceilf(director.state[0].hp*100/maximum_health())),inventory.pills,gun<0?-1:(int)guns[gun].pose,
            s.rounds,gun<0?0:ammo_pool(gun)->reserve,reloading,gun==SNIPER?inventory.zoom:0,gun>=0,0,0,caption && journal_state.always);
-    ui_journal_link();ui_combat_hud(inventory.bullet_time,inventory.slow,player_crouched,director.player_slow);
+    ui_combat_hud(inventory.bullet_time,inventory.slow,player_crouched,director.player_slow);
     int saves=game_save_limit()?(int)game_save_limit()-(int)game_run.saves:-1;
     ui_run_status(game_run.mode==NEW_YORK_MINUTE?(int)ceilf(game_run.remaining):-1,saves);
     uint32_t owned=0,loaded=0;
@@ -1932,6 +1932,11 @@ static bool run_map(const char *stage,UiChoice *next,char following[64],const Sa
             scene_pause_begin(&pause.orbit,&camera,&p);
             UiChoice choice=player_input?ui_pause_menu(can_save,pause_frame,&pause):ui_menu(true,can_save);
             if(choice==UI_ANIMATIONS){room_animation_gallery();choice=UI_RESUME;}
+            if(choice==UI_JOURNAL){
+                char task[483],items[3][96],message[sizeof journal_state.caption];objective_text(task);
+                for(unsigned i=0;i<3;i++)localization_read(journal_state.items[i],items[i],sizeof items[i]);
+                localization_read(journal_state.caption,message,sizeof message);ui_journal(task,items,message);choice=UI_RESUME;
+            }
             bank_pause(false);
             if(choice==UI_SAVE) {
                 if(game_save_limit())game_run.saves++;
@@ -2003,7 +2008,6 @@ static bool run_map(const char *stage,UiChoice *next,char following[64],const Sa
         touchPosition pen={0};if(held&KEY_TOUCH)hidTouchRead(&pen);
         unsigned buttons=TOUCH_BIT(TOUCH_CROUCH)|TOUCH_BIT(TOUCH_WEAPON);
         if(director.player_slow && ui_touch_slow())buttons|=TOUCH_BIT(TOUCH_SLOW);
-        if(presentation_value(presentation.visibility)>=.5f)buttons|=TOUCH_BIT(TOUCH_JOURNAL);
         if(ui_touch_shortcuts())buttons|=TOUCH_SHORTCUTS;
         TouchAction gesture=touch_update(&touch,held&KEY_TOUCH,pen.px,pen.py,buttons);
         uint32_t owned_weapons=0;

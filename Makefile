@@ -24,10 +24,16 @@ build/host/test-native-nav: tests/test_native_nav.c source/native/campaign_nav.c
 	@mkdir -p build/host
 	$(CC_HOST) $(HOST_FLAGS) tests/test_native_nav.c -lm -o $@
 
-test: build/host/test-native-scene build/host/test-campaign-ballistics build/host/test-native-nav
+build/host/test-native-voice: tests/native_voice_probe.c source/native/audio_bank.c source/native/audio_bank.h source/native/ui.h
+	@mkdir -p build/host
+	$(CC_HOST) -std=c11 -O2 -Wall -Wextra -Werror -pthread -Itests/audio_host -Isource/native tests/native_voice_probe.c -lm -o $@
+
+test: build/host/test-native-scene build/host/test-campaign-ballistics build/host/test-native-nav build/host/test-native-voice
 	./build/host/test-native-scene
 	./build/host/test-campaign-ballistics
 	./build/host/test-native-nav
+	./build/host/test-native-voice
+	python3 tests/test_voice_bank.py
 
 .PHONY: native-full
 GAME_DISC ?= game
@@ -35,6 +41,8 @@ CAMPAIGN_CACHE ?= build/campaign-source
 CAMPAIGN_DIR ?= dist/native/3ds/maxpayne/campaign
 ASSET_PYTHON ?= python3
 CAMPAIGN_TEXTURE_LIMIT ?= 512
+VOICE_DISC ?=
+VOICE_LANGUAGE ?= en
 
 .PHONY: campaign-assets
 campaign-assets:
@@ -57,6 +65,7 @@ campaign-assets:
 	$(ASSET_PYTHON) scripts/pack_campaign_projectiles.py "$(GAME_DISC)" "$(CAMPAIGN_DIR)/projectiles.bin"
 	$(ASSET_PYTHON) scripts/pack_campaign_moves.py "$(GAME_DISC)" "$(CAMPAIGN_DIR)/moves.anim"
 	$(ASSET_PYTHON) scripts/pack_campaign_movies.py "$(GAME_DISC)" "$(CAMPAIGN_DIR)"
+	$(if $(strip $(VOICE_DISC)),$(ASSET_PYTHON) scripts/pack_voice.py "$(GAME_DISC)" "$(VOICE_DISC)" "$(CAMPAIGN_CACHE)" "$(CAMPAIGN_DIR)" --other-language "$(VOICE_LANGUAGE)",@true)
 
 native-full: native
 	DEVKITPRO="$(DEVKITPRO)" GAME_DISC="$(GAME_DISC)" $(ASSET_PYTHON) scripts/package_campaign.py "$(CAMPAIGN_DIR)" dist/native-full/3ds/maxpayne/maxpayne.3dsx

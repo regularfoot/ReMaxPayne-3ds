@@ -2,10 +2,10 @@
 #include <math.h>
 
 const TouchRect touch_rects[TOUCH_AIM+1]={
-    [TOUCH_HEAL]={4,26,76,65}, [TOUCH_AIM]={84,26,72,65},
-    [TOUCH_JOURNAL]={4,98,76,23}, [TOUCH_JUMP]={84,168,72,23},
-    [TOUCH_CROUCH]={4,168,76,23}, [TOUCH_SLOW]={84,98,72,23},
-    [TOUCH_WEAPON]={4,194,76,42}, [TOUCH_FIRE]={84,194,72,42}
+    [TOUCH_HEAL]={0}, [TOUCH_AIM]={0}, [TOUCH_JOURNAL]={0},
+    [TOUCH_JUMP]={0}, [TOUCH_FIRE]={0},
+    [TOUCH_CROUCH]={10,200,92,31}, [TOUCH_SLOW]={10,164,92,31},
+    [TOUCH_WEAPON]={114,8,196,32}
 };
 
 TouchAction touch_update(TouchInput *s,bool held,int x,int y,unsigned buttons) {
@@ -40,7 +40,7 @@ float cstick_axis(int value,unsigned deadzone_setting){
 
 // An explicit modal palette uses the whole LCD; gameplay shortcuts stay left.
 const int touch_weapon_order[16]={10,11,0,1,2,3,4,5,6,7,8,9,12,13,14,-1};
-TouchRect touch_weapon_rect(unsigned slot){return (TouchRect){4+78*(slot%4),50+45*(slot/4),76,42};}
+TouchRect touch_weapon_rect(unsigned slot){return (TouchRect){10+76*(slot%4),48+46*(slot/4),72,42};}
 static bool touch_inside(TouchRect r,int x,int y){return x>=r.x && x<r.x+r.w && y>=r.y && y<r.y+r.h;}
 WeaponChoice touch_weapon_update(WeaponPicker *p,bool pressed,int x,int y,bool enabled,uint32_t owned,int current){
     WeaponChoice result={.selected=current};

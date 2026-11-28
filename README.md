@@ -2,13 +2,13 @@
 
 ![Max Payne fires two Berettas during a shoot-dodge on the upper screen of a Nintendo 3DS, with the port's touch-screen HUD below.](docs/remaxpayne-3ds-poster.png)
 
-**ReMaxPayne-3ds** is a fan-made native Max Payne port that works on both **Old 3DS and New 3DS** through the Homebrew Launcher. Version **0.1.1** is an early-access source release for testing on real hardware. See the [changelog](CHANGELOG.md) for graphics settings, combat optimizations, and gameplay fixes.
+**ReMaxPayne-3ds** is a fan-made native Max Payne port that works on both **Old 3DS and New 3DS** through the Homebrew Launcher. Version **0.2.0** is an early-access source release for testing on real hardware. See the [changelog](CHANGELOG.md) for the new touch interface, selectable voice audio, graphics fixes, and gameplay improvements.
 
 This project is intended for personal use with data from your own copy of Max Payne for Xbox. Build locally from your supported PAL or NTSC disc image. Keep the resulting game data and 3DSX for your own use.
 
 ## How it plays
 
-The upper screen shows the third-person campaign, with optional stereoscopic 3D controlled by the console's slider. Move with the Circle Pad, slow down a firefight with Bullet Time, and press **L** while moving to shoot-dodge. The lower screen keeps health, ammunition, the Bullet Time meter, and your objective in view. Tap it to pick a weapon, crouch, or open Max's journal.
+The upper screen shows the third-person campaign, with optional stereoscopic 3D controlled by the console's slider. Move with the Circle Pad, slow down a firefight with Bullet Time, and press **L** while moving to shoot-dodge. The lower screen keeps health, ammunition, the Bullet Time meter, and your objective in view. Tap the weapon panel at the upper right to choose a weapon. The lower-left buttons control crouching and Bullet Time. The full-width objective strip supports two lines, and the enlarged health silhouette keeps its original proportions. Max's journal is available from the pause menu.
 
 On **Old 3DS**, aim with the D-Pad or drag the stylus across the touch screen. Tap the Bullet Time meter to activate slow motion. On **New 3DS**, the C-Stick adds camera control and **ZL** toggles Bullet Time. The D-Pad and stylus also work on New 3DS.
 
@@ -23,7 +23,13 @@ Open **Options → Graphics** to select environment and sky texture limits indep
 | Environment | 128 | Auto (512), 128, 256, 512 |
 | Sky | Auto (128), 128, 256 | Auto (512), 128, 256, 512, 1024 |
 
-Under **Options → Controls**, stick and touch aiming have separate horizontal and vertical sensitivity from **25% to 250%**, in steps of 5%. Gyroscope sensitivity remains independently adjustable on each axis from **25% to 200%**. Hold left or right to adjust repeatedly, or use the touch-screen minus and plus buttons. Existing sensitivity settings migrate when the updated configuration is first loaded.
+Under **Options → Aim**, stick and touch aiming have separate horizontal and vertical sensitivity from **25% to 250%**, in steps of 5%. Gyroscope sensitivity remains independently adjustable on each axis from **25% to 200%**. Hold left or right to adjust repeatedly, use the touch-screen minus and plus buttons, or drag the slider. Existing sensitivity settings migrate when the updated configuration is first loaded.
+
+### Touch menus and voice audio
+
+The lower-screen menus use large touch tiles and a consistent **Back** button in the upper-right corner. Gameplay options and save slots show four compact rows per page. Loading progress, cutscene captions, notices, and journal text sit near the darker lower edge. Menu edges, hit areas, and lines use whole pixels on the native 320×240 display. Physical button navigation remains available.
+
+Under **Options → Sound → Voice**, choose Russian or English when both audio sets were prepared from your own discs. Spoken lines and graphic-novel narration follow the selection; the interface, objectives, and original comic lettering keep the language of the base build. A line already playing finishes normally; subsequent sounds and the next comic page use the selected voice. Optional disc videos use an alternate version when supplied by the second disc. A single-language build keeps its original audio.
 
 ### Default campaign controls
 
@@ -71,13 +77,30 @@ Use a separate checkout for each disc to keep the generated files separate. To c
 
 The campaign build writes `dist/native-full/3ds/maxpayne/maxpayne.3dsx`. Copy it to `3ds/maxpayne/maxpayne.3dsx` on your SD card and run it through the Homebrew Launcher. The game writes saves and settings beside the executable. Set `GAME_DISC` if you extracted the game to a different directory, and `ASSET_PYTHON` if your converters use a separate Python environment. The full 3DSX embeds your locally prepared game data.
 
-When updating to 0.1.1, rerun the asset conversion commands above as well as the native build to regenerate weapon draw runs, particle atlases, and higher-resolution sky mip levels from your disc.
+When updating from 0.1.0, rerun asset conversion as well as the native build to regenerate weapon draw runs, particle atlases, and sky mip levels. Updating an existing 0.1.1 data set for the new interface only requires recompiling; adding a second voice language also requires the optional conversion below.
+
+### Optional second voice language
+
+To build a Russian interface and Russian comic pages with selectable English voices, first extract your Russian disc into `game/` and your English disc into a separate directory. Prepare the native assets from the base disc, then run:
+
+```sh
+export MP_LANG=ru
+python3 scripts/pack_native.py game build/native-assets
+make campaign-assets VOICE_DISC=/path/to/your-english-disc VOICE_LANGUAGE=en
+make native-full
+```
+
+If your disc has English objective strings but you use a Russian interface, an optional private translation can be supplied with `MP_OBJECTIVE_TRANSLATION=/path/to/your-objectives.tsv` during `campaign-assets`. Use UTF-8 lines containing a disc string key, a tab, and the translated text. The packer validates keys against your disc; translation tables are not included here.
+
+The second source must also be your own extracted Xbox copy. The voice packer converts its sound definitions and comic narration locally, adds language-marked audio variants, and deduplicates identical PCM data. No voice recordings, game tables, comics, or converted game data are supplied by this repository. For an English base with optional Russian speech, use `MP_LANG=en` and `VOICE_LANGUAGE=ru` with your Russian disc as `VOICE_DISC`. Re-run asset preparation when adding or changing a second voice source.
 
 ## Testing status
 
-The Alpha Order transparency path was tested in earlier builds on physical 3DS hardware. The final 0.1.1 fixes passed automated host checks, scripted progression through all 67 campaign transitions on PAL and NTSC data, and targeted Old/New 3DS profiles in Azahar. These checks exercise scripts, geometry, menus, saves, and rendering in selected scenes. Physical-console testing of the final combined build is still pending.
+The release includes fixes for the reported transparency and flicker regressions: hardware-tested **Alpha Order**, corrected additive-particle fog blending, opaque explosion-square artifacts, shotgun mesh overlaps, and glass/splinter alpha masks. Campaign sky rendering retains its normal fog. Weapon smoke follows the authored muzzle sockets, including both Berettas.
 
-Occasional graphical artifacts remain under investigation. Some Xbox cutscene letterboxing commands are also awaiting a verified presentation implementation. Further reports from real hardware are welcome.
+The preceding combined gameplay fixes passed host checks, scripted progression through all 67 campaign transitions on PAL and NTSC data, and targeted Old/New profiles in Azahar. The new touch interface passed native hit-area, page navigation, settings migration, and fixed weapon-icon checks. Old 3DS emulator testing covered touch settings and loading a campaign save into the new HUD. Selectable voice audio has separate conversion and runtime checks.
+
+Version 0.2.0 remains an early-access test build. Physical-console testing of the complete new release is still needed. Some hardware-specific graphical artifacts and Xbox cutscene letterboxing remain under investigation; further real-hardware reports are welcome.
 
 ## Credits
 

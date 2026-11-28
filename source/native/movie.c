@@ -1,6 +1,7 @@
 #include "language.h"
 #include "movie.h"
 #include "campaign_file.h"
+#include "audio_bank.h"
 #include "ui.h"
 #include <3ds.h>
 #include <stdlib.h>
@@ -43,7 +44,7 @@ static bool decode(const uint8_t *data,unsigned size,uint8_t *out) {
 }
 
 bool movie_play(const char *name) {
-    FILE *f=campaign_file(name);
+    FILE *f=bank_voice_file(name);
     if(!f) return false;
     struct {char magic[4];uint32_t rate,frames;} header;
     bool ok=fread(&header,sizeof header,1,f)==1 && !memcmp(header.magic,"MPV1",4) &&

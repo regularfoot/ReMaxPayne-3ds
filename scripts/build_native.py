@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build the native 3DS executable and embed the prepared assets as RomFS."""
 import os
+import re
 from pathlib import Path
 import struct
 import subprocess
@@ -36,8 +37,9 @@ if (arm/'arm-none-eabi/lib/sysbase.specs').exists():
 subprocess.run([arm/'bin/arm-none-eabi-gcc',*flags,source/'main.c',source/'ui.c',source/'campaign_file.c',source/'audio_bank.c',source/'save.c',source/'async_save.c',source/'async_log.c',source/'campaign.c',source/'game_rules.c',source/'director.c',source/'campaign_world.c',source/'portal.c',source/'campaign_bounds.c',source/'presentation.c',source/'pose_bank.c',source/'camera_path.c',source/'campaign_nav.c',source/'campaign_combat.c',source/'room.c',source/'alpha_pass.c',source/'phone.c',
                 source/'item_mesh.c',source/'movie.c',source/'comic.c',source/'touch.c',source/'gyro.c',source/'texture.c',source/'actor.c',source/'scene.c',source/'effects.c',source/'particles.c',source/'mission.c',source/'navigation.c',source/'localization.c','-specs=3dsx.specs',
                 '-Wl,--gc-sections','-L'+str(sdk/'libctru/lib'),'-lcitro3d','-lctru','-lm','-o',elf],check=True)
+version=re.search(r'#define MP_VERSION "([^"\n]+)"',(source/'version.h').read_text())[1]
 smdh = build/'native.smdh'
-subprocess.run([sdk/'tools/bin/smdhtool','--create','Max Payne','Native port for Nintendo 3DS',
+subprocess.run([sdk/'tools/bin/smdhtool','--create','Max Payne',f'ReMaxPayne {version} - Old/New 3DS',
                 'Max Payne 3DS',sdk/'libctru/default_icon.png',smdh],check=True)
 subprocess.run([sdk/'tools/bin/3dsxtool',elf,elf.with_suffix('.3dsx'),'--smdh='+str(smdh),
                 '--romfs='+str(assets)],check=True)

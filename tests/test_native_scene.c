@@ -70,7 +70,7 @@ static void test_weapon_picker(void){
     assert(seen==(1u<<TOUCH_WEAPON_COUNT)-1);
     for(unsigned gun=0;gun<TOUCH_WEAPON_COUNT;gun++){
         WeaponPicker picker={0};
-        WeaponChoice choice=touch_weapon_update(&picker,true,30,214,true,0x7fff,0);
+        WeaponChoice choice=touch_weapon_update(&picker,true,200,24,true,0x7fff,0);
         assert(choice.consumed && choice.changed && picker.open);
         unsigned slot=0;while(touch_weapon_order[slot]!=(int)gun)slot++;
         TouchRect r=touch_weapon_rect(slot);
@@ -78,13 +78,13 @@ static void test_weapon_picker(void){
         assert(choice.consumed && choice.changed && !picker.open && choice.selected==(int)gun);
     }
     WeaponPicker picker={0};
-    touch_weapon_update(&picker,true,30,214,true,1,0);
+    touch_weapon_update(&picker,true,200,24,true,1,0);
     TouchRect unavailable=touch_weapon_rect(1);
     WeaponChoice choice=touch_weapon_update(&picker,true,unavailable.x+10,unavailable.y+10,true,1,0);
     assert(picker.open && choice.selected==0 && !choice.changed && choice.consumed);
     choice=touch_weapon_update(&picker,true,318,238,true,1,0);
     assert(choice.consumed && choice.changed && !picker.open);
-    touch_weapon_update(&picker,true,30,214,true,1,0);
+    touch_weapon_update(&picker,true,200,24,true,1,0);
     choice=touch_weapon_update(&picker,false,0,0,false,1,0);
     assert(!picker.open && choice.changed);
 }
@@ -106,8 +106,8 @@ static void test_touch(void) {
     assert(cstick_axis(44,4)==0 && cstick_axis(150,4)==1 && cstick_axis(-156,1)==-1);
     TouchInput state={0};
     unsigned mask=TOUCH_SHORTCUTS|TOUCH_BIT(TOUCH_CROUCH)|TOUCH_BIT(TOUCH_SLOW)|TOUCH_BIT(TOUCH_JOURNAL);
-    for(int y=0;y<240;y++){
-        for(int x=160;x<320;x++){
+    for(int y=84;y<231;y++){
+        for(int x=114;x<310;x++){
             assert(touch_update(&state,true,x,y,mask).pressed==TOUCH_LOOK);
             TouchAction drag=touch_update(&state,true,20,205,mask);
             assert(drag.pressed==TOUCH_NONE && drag.dx==20-x && drag.dy==y-205);
@@ -116,6 +116,7 @@ static void test_touch(void) {
     }
     for(TouchZone zone=TOUCH_WEAPON;zone<=TOUCH_AIM;zone++){
         TouchRect r=touch_rects[zone];
+        if(!r.w || !r.h)continue;
         TouchAction press=touch_update(&state,true,r.x,r.y,mask);
         assert(press.pressed==zone && press.held==zone);
         TouchAction drag=touch_update(&state,true,319,180,mask);

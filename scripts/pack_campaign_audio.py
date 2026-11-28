@@ -20,11 +20,11 @@ def sections(script):
         yield tag[1].lower(),body[tag.end():tags[i+1].start() if i+1<len(tags) else len(body)]
 
 
-def pack(disc,source,out):
+def pack(disc,source,out,reference_root=None):
     arcs=archive_root(disc);root=arcs/'data/database/sounds';music=disc/'data/database/music'
     waves={p.relative_to(root).as_posix().casefold():p for p in root.rglob('*') if p.suffix.lower()=='.wav'}
     tracks={p.relative_to(music).as_posix().casefold():p for p in music.rglob('*') if p.suffix.lower()=='.wav'}
-    keys={key for kind,key in references(out.parent) if kind=='audio'}
+    keys={key for kind,key in references(reference_root or out.parent) if kind=='audio'}
     for path in source.glob('*.gz'):
         s=gzip.open(path,'rt').read().replace('\\"','')
         for group,name in re.findall(r'->a_play(?:floating)?(?:3d)?sound\(\s*([^,()]+),\s*([^,()]+)',s,re.I):
@@ -68,6 +68,7 @@ def pack(disc,source,out):
             table.append(struct.pack('<80sIIfI',key.encode(),*offsets[wave],gain,flags))
         bank.seek(8);bank.writelines(table)
     temp.replace(out)
+    if out.name=='audio.bank':(out.parent/'voice/languages.json').unlink(missing_ok=True)
     print(f'{len(defs)} variants, {len(offsets)} source clips, {out.stat().st_size} bytes',flush=True)
 
 
